@@ -54,6 +54,25 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = True
+
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'testserver',
+]
+CORS_EXPOSE_HEADERS = [
+]
+
 ROOT_URLCONF = 'checkup_backend.urls'
 
 TEMPLATES = [
@@ -80,11 +99,27 @@ WSGI_APPLICATION = 'checkup_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'django',
+        'USER': 'admin',
+        'PASSWORD': 'docl2021!!',
+        'HOST': 'groups-test-db.clj0rbkrqp2f.ap-northeast-2.rds.amazonaws.comm',
+        'PORT': '3306',
+    },
+    'checkup': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'checkup',
+        'USER': 'admin',
+        'PASSWORD': 'docl2021!!',
+        'HOST': 'groups-test-db.clj0rbkrqp2f.ap-northeast-2.rds.amazonaws.com',
+        'PORT': '3306',
+    },
 }
-
+DATABASE_ROUTERS = ['checkup_backend.dbrouter.MultiDBRouter']
+DB_Mapping = {
+    "django": "default",
+    "checkup": "checkup",
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
