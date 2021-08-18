@@ -84,3 +84,5 @@ def patient_login(request):
                 raise ValueError('wrong_email')
     except Exception as e:
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
