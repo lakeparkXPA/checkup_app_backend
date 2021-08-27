@@ -1,7 +1,6 @@
 import graphene
 from graphene_django.types import DjangoObjectType
 
-
 from patient.models import PInfo, PLogin
 
 
@@ -50,6 +49,7 @@ class CreatePLogin(graphene.Mutation):
         plogin.agreed = input.agreed
         plogin.save()
         return CreatePLogin(plogin=plogin)
+
 
 class UpdatePlogin(graphene.Mutation):
     class Arguments:
@@ -126,6 +126,7 @@ class UpdatePInfo(graphene.Mutation):
         plogin.save()
 
         return UpdatePInfo(pinfo=pinfo)
+
 
 class Mutation(graphene.ObjectType):
     create_plogin = CreatePLogin.Field()

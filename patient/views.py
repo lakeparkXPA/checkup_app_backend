@@ -4,22 +4,25 @@ from django.core.validators import validate_email
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED, HTTP_405_METHOD_NOT_ALLOWED
+from drf_yasg.utils import swagger_auto_schema
 
-from checkup_backend.settings import ALGORITHM, SECRET_KEY
+from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PatientAuthenticated
 
-from patient.models import PLogin, PInfo, PFixed, PFixedUnique, PFixedCondition
+from patient.models import PLogin, PInfo, PFixed, PFixedUnique, PFixedCondition, PDaily, PDailyPredict, PDailySymptom, \
+    PDailyTemperature, DPRelation, DUpdate
 
 import jwt
 import datetime
+import requests, json
 
 
 def make_token(token_id):
     payload = {}
     payload['auth'] = 'patient'
     payload['id'] = token_id
-    payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(seconds=300)
+    payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(hours=300)
 
     return jwt.encode(payload, SECRET_KEY, ALGORITHM)
 
@@ -38,7 +41,10 @@ def bool_dic(data, data_lst):
             data_dic[d] = 0
     return data_dic
 
+@swagger_auto_schema(
+    methods='POST',
 
+)
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def patient_register(request):
@@ -163,8 +169,7 @@ def patient_edit(request):
     password1 = request.data['password1']
     password2 = request.data['password2']
     name = request.data['name']
-    birth = request.data['birth']
-    sex = request.data['sex']
+
     token = request.META.get('HTTP_TOKEN')
     try:
         if not email:
@@ -189,10 +194,8 @@ def patient_edit(request):
         p_user.password = password1
         p_user.save()
 
-        p_detail = PInfo(p_fk=p_user)
+        p_detail = PInfo(p=p_user)
         p_detail.name = name
-        p_detail.birth = birth
-        p_detail.sex = sex
         p_detail.save()
 
         return Response(status=HTTP_201_CREATED)
@@ -203,8 +206,12 @@ def patient_edit(request):
 @api_view(['POST', 'PUT'])
 @permission_classes((PatientAuthenticated,))
 def set_fixed(request):
+
     token = request.META.get('HTTP_TOKEN')
     p_id = get_id(token)
+
+    birth = request.data['birth']
+    sex = request.data['sex']
 
     smoking = request.data['smoking']
     height = request.data['height']
@@ -221,21 +228,36 @@ def set_fixed(request):
     condition_data = bool_dic(condition, condition_lst)
     unique_data = bool_dic(unique, unique_lst)
 
+    p_user = PLogin(p_id=p_id)
+
     if request.method == 'POST':
+        try:
+            id_cnt = PFixed.objects.get(p_id=p_id)
+            return Response({'message': 'fixed_exist'}, status=HTTP_405_METHOD_NOT_ALLOWED)
+        except PFixed.DoesNotExist:
+            pass
         p_fixed = PFixed(p_id=p_id)
+
         p_fixed.save()
+        p_detail = PInfo(p=p_user)
 
         res = Response(status=HTTP_201_CREATED)
 
     else:
         p_fixed = PFixed.objects.get(p_id=p_id)
-
+        p_detail = PInfo.objects.get(p=p_user)
         res = Response(status=HTTP_200_OK)
+
+
+    p_detail.birth = birth
+    p_detail.sex = sex
+    p_detail.save()
 
     p_fixed.weight = weight
     p_fixed.height = height
     p_fixed.adl = adl
     p_fixed.smoking = smoking
+    p_fixed.p_fixed_date = datetime.datetime.utcnow()
     p_fixed.save()
 
     p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
@@ -246,4 +268,133 @@ def set_fixed(request):
 
     return res
 
+
+@api_view(['POST'])
+@permission_classes((PatientAuthenticated,))
+def set_daily(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+
+    latitude = request.data['latitude']
+    longitude = request.data['longitude']
+
+    antipyretics = request.data['antipyretics']
+    temp_capable = request.data['temp_capable']
+    temp = request.data['temp']
+
+    symptom = request.data['symptom']
+    symptom_lst = ['hemoptysis', 'dyspnea', 'chest_pain', 'cough', 'sputum', 'rhinorrhea', 'sore_throat', 'anosmia',
+                   'myalgia', 'arthralgia', 'fatigue', 'headache', 'diarrhea', 'nausea_vomiting', 'chill']
+    symptom_data = bool_dic(symptom, symptom_lst)
+
+    p_fixed = PFixed.objects.get(p_id=p_id)
+    p_fixed_condition = list(PFixedCondition.objects.filter(p_fixed_id=p_fixed).\
+                             values('chronic_cardiac_disease', 'chronic_neurologic_disorder', 'copd', 'asthma',
+                                    'chronic_liver_disease', 'hiv', 'autoimmune_disease', 'dm', 'hypertension', 'ckd',
+                                    'cancer', 'heart_failure', 'dementia', 'chronic_hematologic_disorder'))[0]
+    p_fixed_unique = list(PFixedUnique.objects.filter(p_fixed_id=p_fixed).
+                          values('transplantation', 'immunosuppress_agent', 'chemotherapy', 'pregnancy'))[0]
+
+
+    data = {}
+    data.update(symptom_data)
+    data.update(p_fixed_condition)
+    data.update(p_fixed_unique)
+    data['temp'] = temp
+
+    if temp_capable == 0:
+        data['temp'] = 36.5
+    if antipyretics > 0 and temp < 37.5:
+        data['temp'] = 37.5
+
+    prediction = json.loads(requests.get("https://model.docl.org/predict", data).json())
+    prediction_icu = json.loads(requests.get("https://model.docl.org/predict_icu", data).json())
+    prediction['icu'] = prediction_icu['probability']
+
+    p_daily = PDaily(p=p_id)
+    p_daily.p_daily_time = datetime.datetime.utcnow()
+    p_daily.latitude = latitude
+    p_daily.longitude = longitude
+    p_daily.save()
+
+    p_daily_symptom = PDailySymptom(p_daily=p_daily, **symptom_data)
+    p_daily_symptom.save()
+
+    p_daily_temp = PDailyTemperature(p_daily=p_daily)
+    p_daily_temp.antipyretics = antipyretics
+    p_daily_temp.temp_capable = temp_capable
+    p_daily_temp.temp = temp
+    p_daily_temp.save()
+
+    p_daily_predict = PDailyPredict(p_daily=p_daily)
+    p_daily_predict.prediction_result = prediction['ml_probability'] * 100
+    p_daily_predict.prediction_explaination = json.dumps(prediction)
+    p_daily_predict.save()
+
+    previous_id_lst = list(PDaily.objects.filter(p_id=p_id).order_by('-p_daily_time').values('p_daily_id'))
+
+    update_data = {}
+    if len(previous_id_lst) > 1:
+        previous_icu = PDailyPredict.objects.get(p_daily_id=previous_id_lst[1]).prediction_explaination
+        previous_icu_decode = json.loads(previous_icu)
+        update_data['oxygen'] = prediction['ml_probability'] - previous_icu_decode['ml_probability']
+        update_data['icu'] = prediction['icu'] - previous_icu_decode['ice']
+    else:
+        update_data['oxygen'] = 0
+        update_data['icu'] = 0
+
+    doc_lst = DPRelation.objects.select_related('d').select_related('p').filter(Q(p=p_id) & Q(discharged=0)).\
+        values('relation_id', 'p__pinfo__name', 'd_id', 'd__push_token', 'd__alert')
+    tokens = []
+    if doc_lst:
+        update_data['name'] = doc_lst[0]['p__pinfo__name']
+
+        for row in doc_lst:
+            update_json = json.dumps(update_data)
+            d_update = DUpdate(relation=row['relation_id'])
+            d_update.type = 1
+            d_update.data = update_json
+            d_update.seen = 0
+            d_update.save()
+
+            if row['d__push_token'] != "" and row['d__alert'] < 2:
+                if (update_data['oxygen'] > 0 or update_data['icu']) or row['d__alert'] == 0:
+                    tokens.append(row['d__push_token'])
+
+        if len(tokens) > 0:
+            pushbody = "O2 probability "
+            if round(100*update_data['oxygen']) < 0:
+                pushbody += "improved by " + str(round((-100) * update_data['oxygen'])) + "% and "
+            elif round(100*update_data['oxygen']) > 0:
+                pushbody += "worsened by " + str(round(100 * update_data['oxygen'])) + "% and "
+            else:
+                pushbody += "is the same and "
+
+            pushbody += "ICU probability "
+
+            if round(100 * update_data['icu']) < 0:
+                pushbody += "improved by " + str(round((-100) * update_data['icu'])) + "%."
+            elif round(100 * update_data['icu']) > 0:
+                pushbody += "worsened by " + str(round(100 * update_data['icu'])) + "%."
+            else:
+                pushbody += "is the same."
+
+            url = 'https://fcm.googleapis.com/fcm/send'
+
+            headers = {
+                'Authorization': 'key='+FIREBASE_KEY,
+                'Content-Type': 'application/json; UTF-8',
+            }
+            contents = {
+                'registration_ids': tokens,
+                'notification': {
+                    'title': str(update_data['name']) + ' has done a new check-up',
+                    'body': pushbody
+                }
+            }
+            requests.post(url, data=json.dumps(contents), headers=headers)
+    else:
+        pass
+
+    return Response(status=HTTP_201_CREATED)
 

@@ -171,7 +171,7 @@ class PDailyTemperature(models.Model):
     p_daily = models.ForeignKey(PDaily, models.DO_NOTHING)
     antipyretics = models.IntegerField(blank=True, null=True)
     temp_capable = models.IntegerField(blank=True, null=True)
-    temperature = models.FloatField(blank=True, null=True)
+    temp = models.FloatField(blank=True, null=True)
 
     class Meta:
         managed = False

@@ -7,5 +7,6 @@ urlpatterns = [
     path('check', patient_email_check, name='patient_email_check'),
     path('edit', patient_edit, name='patient_edit'),
 
+
     path('refresh', token_refresh, name='token_refresh'),
 ]

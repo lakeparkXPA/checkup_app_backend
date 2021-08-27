@@ -22,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-u4y2_&y=lfig6pc!^#dwwuvi8!rb5x*h&%7y!vh#h%j$wig-wv'
 ALGORITHM = 'HS256'
+FIREBASE_KEY = "AAAAxEMNyZU:APA91bELOZLHi5nse3113Gdsvp-WZseJEdEeKuH8qDiVKcp3O96V5K9onbxIr9mOI50u4Zx9RQkqTjuuycRheSAWsF7r3L0E3yBgRfMHSq3cbdwziXV5qmbmOMHh48uG4AY-cUzW4aTJ"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
     'patient.apps.PatientConfig',
     'physician.apps.PhysicianConfig',
     'graphene_django',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -131,5 +133,4 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 
