@@ -49,6 +49,7 @@ class DLogin(models.Model):
     d_id = models.BigAutoField(primary_key=True)
     email = models.EmailField(db_index=True, unique=True)
     password = models.CharField(max_length=100, blank=True, null=True)
+    name = models.CharField(max_length=100, blank=True, null=True)
     nation = models.CharField(max_length=100, blank=True, null=True)
     region = models.CharField(max_length=100, blank=True, null=True)
     hospital = models.CharField(max_length=100, blank=True, null=True)

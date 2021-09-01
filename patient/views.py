@@ -398,3 +398,87 @@ def set_daily(request):
 
     return Response(status=HTTP_201_CREATED)
 
+
+@api_view(['POST'])
+@permission_classes((PatientAuthenticated,))
+def get_fixed(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+    fixed = PFixed.objects.prefetch_related('pfixedcondition_set').prefetch_related('pfixedunique_set').filter(p=p_id)
+    fixed_val = fixed.values('p_fixed_id', 'p', 'smoking', 'height', 'weight', 'adl',
+                             chronic_cardiac_disease=F('pfixedcondition__chronic_cardiac_disease'),
+                             chronic_neurologic_disorder=F('pfixedcondition__chronic_neurologic_disorder'),
+                             copd=F('pfixedcondition__copd'),
+                             asthma=F('pfixedcondition__asthma'),
+                             chronic_liver_disease=F('pfixedcondition__chronic_liver_disease'),
+                             hiv=F('pfixedcondition__hiv'),
+                             autoimmune_disease=F('pfixedcondition__autoimmune_disease'),
+                             dm=F('pfixedcondition__dm'),
+                             hypertension=F('pfixedcondition__hypertension'),
+                             ckd=F('pfixedcondition__ckd'),
+                             cancer=F('pfixedcondition__cancer'),
+                             heart_failure=F('pfixedcondition__heart_failure'),
+                             dementia=F('pfixedcondition__dementia'),
+                             chronic_hematologic_disorder=F('pfixedcondition__chronic_hematologic_disorder'),
+                             transplantation=F('pfixedunique__transplantation'),
+                             immunosuppress_agent=F('pfixedunique__immunosuppress_agent'),
+                             chemotherapy=F('pfixedunique__chemotherapy'),
+                             pregnancy=F('pfixedunique__pregnancy')
+                             )
+    return_dic = dict(list(PInfo.objects.filter(p=19).values('name', 'birth', 'sex'))[0])
+    return_dic.update(dict(list(fixed_val)[0]))
+
+    return Response(return_dic, status=HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes((PatientAuthenticated,))
+def get_daily(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+
+    daily = PDaily.objects.prefetch_related('pdailysymptom_set', 'pdailypredict_set', 'pdailytemperature_set').\
+        filter(p=p_id).order_by('-p_daily_id')
+    daily_lst = daily.values('p_daily_id', 'p', 'p_daily_time', 'latitude', 'longitude',
+                             prediction_result=F('pdailypredict__prediction_result'),
+                             prediction_explaination=F('pdailypredict__prediction_explaination'),
+                             hemoptysis=F('pdailysymptom__hemoptysis'),
+                             dyspnea=F('pdailysymptom__dyspnea'),
+                             chest_pain=F('pdailysymptom__chest_pain'),
+                             cough=F('pdailysymptom__cough'),
+                             sputum=F('pdailysymptom__sputum'),
+                             rhinorrhea=F('pdailysymptom__rhinorrhea'),
+                             sore_throat=F('pdailysymptom__sore_throat'),
+                             anosmia=F('pdailysymptom__anosmia'),
+                             myalgia=F('pdailysymptom__myalgia'),
+                             arthralgia=F('pdailysymptom__arthralgia'),
+                             fatigue=F('pdailysymptom__fatigue'),
+                             headache=F('pdailysymptom__headache'),
+                             diarrhea=F('pdailysymptom__diarrhea'),
+                             nausea_vomiting=F('pdailysymptom__nausea_vomiting'),
+                             chill=F('pdailysymptom__chill'),
+                             antipyretics=F('pdailytemperature__antipyretics'),
+                             temp_capable=F('pdailytemperature__temp_capable'),
+                             temp=F('pdailytemperature__temp'),
+                             )
+    return Response(daily_lst, status=HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes((PatientAuthenticated,))
+def get_physicians(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+
+    phy = DPRelation.objects.select_related('d').filter(p=p_id).order_by('add_time').\
+        values('relation_id','d_id', 'add_time', 'd__name', 'd__nation', 'd__region', 'd__hospital')
+
+    phy_lst = []
+    for row in phy:
+        row_dic = row
+        row_dic['relation_id'] = row_dic['relation_id'] + 10000
+        phy_lst.append(row_dic)
+
+    return Response(phy_lst, status=HTTP_200_OK)
+
+
