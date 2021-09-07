@@ -109,3 +109,43 @@ def physician_register(request):
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+@swagger_auto_schema(
+	operation_description='Check account email.',
+	method='post',
+	request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+    	properties={
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+    	},
+		required=['email'],
+	),
+	responses={
+		HTTP_200_OK: 'Success',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def physician_email_check(request):
+    email = request.data['email']
+
+    try:
+        if not email:
+            raise ValueError('email_missing')
+        try:
+            id_cnt = DLogin.objects.get(email=email)
+            raise ValueError('email_exist')
+        except DLogin.DoesNotExist:
+            res = Response({"success": True}, status=HTTP_200_OK)
+            return res
+
+    except Exception as e:
+        if str(e) == 'email_exist':
+            res = Response({"success": True}, status=HTTP_200_OK)
+            return res
+        else:
+            res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+            return res
+
