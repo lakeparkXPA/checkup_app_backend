@@ -14,8 +14,8 @@ from drf_yasg import openapi
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PatientAuthenticated
 
-from patient.serializers import *
-from patient.models import DLogin
+from physician.serializers import *
+from physician.models import DLogin
 
 from tools import make_token, get_id
 
@@ -42,9 +42,15 @@ import json
             'password2': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Password2'),
-            'agreed':  openapi.Schema(
-					type=openapi.TYPE_BOOLEAN,
-					description='Agreed'),
+            'country':  openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Country'),
+            'region':  openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Region'),
+            'hospital':  openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Hospital'),
             'name': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Name'),
@@ -61,13 +67,12 @@ import json
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def physician_register(request):
+    data = dict(request.data)
+
     email = request.data['email']
     password1 = request.data['password1']
     password2 = request.data['password2']
-    country = request.data['country']
-    region = request.data['region']
-    hospital = request.data['hospital']
-    name = request.data['name']
+
     try:
         if not email:
             raise ValueError('email_missing')
@@ -84,8 +89,23 @@ def physician_register(request):
         if password2 != password1:
             raise ValueError('password_not_same')
 
-        return Response(request.data)
+        data['password'] = password1
+        data['nation'] = data['country']
 
-        return Response(status=HTTP_201_CREATED)
+        data.pop('country')
+        data.pop('password1')
+        data.pop('password2')
+
+
+        d_serial = DLoginSerializer(data=data)
+
+        if d_serial.is_valid():
+            d_serial.save()
+            return Response(status=HTTP_201_CREATED)
+        else:
+            return Response(d_serial.errors, status=HTTP_400_BAD_REQUEST)
+
     except Exception as e:
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
