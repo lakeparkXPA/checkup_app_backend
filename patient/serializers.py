@@ -1,19 +1,7 @@
 from rest_framework import serializers
 
 from patient.models import *
-from checkup_backend.settings import ALGORITHM, SECRET_KEY
-
-import jwt
-import datetime
-
-def make_token(token_id):
-    payload = {}
-    payload['auth'] = 'patient'
-    payload['id'] = token_id
-    payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(hours=300)
-
-    return jwt.encode(payload, SECRET_KEY, ALGORITHM)
-
+from tools import make_token
 
 class FixedCondition(serializers.ModelSerializer):
     class Meta:
