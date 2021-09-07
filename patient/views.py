@@ -257,6 +257,16 @@ def patient_edit(request):
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+@api_view(['DELETE'])
+@permission_classes((PatientAuthenticated,))
+def patient_remove(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+
+    patient_del = PLogin.objects.get(p_id=p_id)
+    patient_del.delete()
+
+
 class Fixed(APIView):
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [PatientAuthenticated]
