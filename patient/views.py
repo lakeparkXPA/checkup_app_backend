@@ -2,21 +2,30 @@ from django.db.models import Q, F
 from django.core.validators import validate_email
 
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions
+from rest_framework import permissions, authentication
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED, HTTP_405_METHOD_NOT_ALLOWED
+from rest_framework.views import APIView
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED, \
+    HTTP_405_METHOD_NOT_ALLOWED
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PatientAuthenticated
 
+from patient.serializers import *
 from patient.models import PLogin, PInfo, PFixed, PFixedUnique, PFixedCondition, PDaily, PDailyPredict, PDailySymptom, \
     PDailyTemperature, DPRelation, DUpdate
 
 import jwt
 import datetime
-import requests, json
+import requests
+import json
 
+# TODO ---- 회원탈퇴 api
+# TODO ---- get daily update,
+# TODO ---- 의료진 환자 추가 시 push 알림
 
 def make_token(token_id):
     payload = {}
@@ -41,9 +50,38 @@ def bool_dic(data, data_lst):
             data_dic[d] = 0
     return data_dic
 
-@swagger_auto_schema(
-    methods='POST',
 
+
+@swagger_auto_schema(
+	operation_description='Register account.',
+	method='post',
+	request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+        	'password1': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password1'),
+            'password2': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password2'),
+            'agreed':  openapi.Schema(
+					type=openapi.TYPE_BOOLEAN,
+					description='Agreed'),
+            'name': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Name'),
+    	},
+		required=['email', 'password'],
+	),
+	responses={
+		HTTP_201_CREATED: openapi.Schema(
+				type=openapi.TYPE_STRING,
+				decription='auth-token'),
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
 )
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
@@ -54,8 +92,6 @@ def patient_register(request):
     agreed = request.data['agreed']
 
     name = request.data['name']
-    birth = request.data['birth']
-    sex = request.data['sex']
     try:
         if not email:
             raise ValueError('email_missing')
@@ -82,8 +118,6 @@ def patient_register(request):
         p_detail = PInfo()
         p_detail.p = p_fk
         p_detail.name = name
-        p_detail.birth = birth
-        p_detail.sex = sex
         p_detail.save()
 
         return Response(status=HTTP_201_CREATED)
@@ -115,12 +149,32 @@ def patient_email_check(request):
             return res
 
 
+@swagger_auto_schema(
+	operation_description='Return an auth-token for the user account.',
+	method='post',
+	request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+        	'password': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password'),
+    	},
+		required=['email', 'password'],
+	),
+	responses={
+		HTTP_200_OK: PatientLogin,
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def patient_login(request):
     email = request.data['email']
     password = request.data['password']
-    login_obj = PLogin.objects.get(email=email)
+    login_obj = PLogin.objects.filter(email=email)
     try:
         try:
             validate_email(email)
@@ -128,14 +182,14 @@ def patient_login(request):
             raise ValueError('email_format')
         else:
             try:
-                db_pass = login_obj.password
+                db_pass = login_obj.get().password
 
                 if db_pass != password:
                     raise ValueError('wrong_password')
                 else:
-                    token = make_token(login_obj.p_id)
+                    token = PatientLogin(login_obj, many=True).data[0]
 
-                    return Response({'token': token}, status=HTTP_200_OK)
+                    return Response(token, status=HTTP_200_OK)
 
             except PLogin.DoesNotExist:
                 raise ValueError('wrong_email')
@@ -201,6 +255,129 @@ def patient_edit(request):
         return Response(status=HTTP_201_CREATED)
     except Exception as e:
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
+class Fixed(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [PatientAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description='Getting fixed data.',
+        responses={
+            HTTP_200_OK: FixedGet,
+            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+        },
+    )
+    def get(self, request, format=None):
+        token = request.META.get('HTTP_TOKEN')
+        p_id = get_id(token)
+        fixed = PFixed.objects.filter(p=p_id)
+
+        return_dic = FixedGet(fixed, many=True).data[0]
+        return Response(return_dic, status=HTTP_200_OK)
+
+    def post(self, request, format=None):
+        token = request.META.get('HTTP_TOKEN')
+        p_id = get_id(token)
+
+        birth = request.data['birth']
+        sex = request.data['sex']
+
+        smoking = request.data['smoking']
+        height = request.data['height']
+        weight = request.data['weight']
+        adl = request.data['adl']
+
+        condition = request.data['condition']
+        condition_lst = ['chronic_cardiac_disease', 'chronic_neurologic_disorder', 'copd', 'asthma',
+                         'chronic_liver_disease', 'hiv', 'autoimmune_disease', 'dm', 'hypertension', 'ckd', 'cancer',
+                         'heart_failure', 'dementia', 'chronic_hematologic_disorder']
+        unique = request.data['unique']
+        unique_lst = ['transplantation', 'immunosuppress_agent', 'chemotherapy', 'pregnancy']
+
+        condition_data = bool_dic(condition, condition_lst)
+        unique_data = bool_dic(unique, unique_lst)
+
+        p_user = PLogin(p_id=p_id)
+
+        try:
+            id_cnt = PFixed.objects.get(p_id=p_id)
+            return Response({'message': 'fixed_exist'}, status=HTTP_405_METHOD_NOT_ALLOWED)
+        except PFixed.DoesNotExist:
+            pass
+        p_fixed = PFixed(p_id=p_id)
+
+        p_fixed.save()
+        p_detail = PInfo(p=p_user)
+
+        res = Response(status=HTTP_201_CREATED)
+
+        p_detail.birth = birth
+        p_detail.sex = sex
+        p_detail.save()
+
+        p_fixed.weight = weight
+        p_fixed.height = height
+        p_fixed.adl = adl
+        p_fixed.smoking = smoking
+        p_fixed.p_fixed_date = datetime.datetime.utcnow()
+        p_fixed.save()
+
+        p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
+        p_fixed_condition.save()
+
+        p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
+        p_fixed_unique.save()
+
+        return res
+
+    def put(self,request, format=None):
+        token = request.META.get('HTTP_TOKEN')
+        p_id = get_id(token)
+
+        birth = request.data['birth']
+        sex = request.data['sex']
+
+        smoking = request.data['smoking']
+        height = request.data['height']
+        weight = request.data['weight']
+        adl = request.data['adl']
+
+        condition = request.data['condition']
+        condition_lst = ['chronic_cardiac_disease', 'chronic_neurologic_disorder', 'copd', 'asthma',
+                         'chronic_liver_disease', 'hiv', 'autoimmune_disease', 'dm', 'hypertension', 'ckd', 'cancer',
+                         'heart_failure', 'dementia', 'chronic_hematologic_disorder']
+        unique = request.data['unique']
+        unique_lst = ['transplantation', 'immunosuppress_agent', 'chemotherapy', 'pregnancy']
+
+        condition_data = bool_dic(condition, condition_lst)
+        unique_data = bool_dic(unique, unique_lst)
+
+        p_user = PLogin(p_id=p_id)
+
+
+        p_fixed = PFixed.objects.get(p_id=p_id)
+        p_detail = PInfo.objects.get(p=p_user)
+        res = Response(status=HTTP_200_OK)
+
+        p_detail.birth = birth
+        p_detail.sex = sex
+        p_detail.save()
+
+        p_fixed.weight = weight
+        p_fixed.height = height
+        p_fixed.adl = adl
+        p_fixed.smoking = smoking
+        p_fixed.p_fixed_date = datetime.datetime.utcnow()
+        p_fixed.save()
+
+        p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
+        p_fixed_condition.save()
+
+        p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
+        p_fixed_unique.save()
+
+        return res
 
 
 @api_view(['POST', 'PUT'])
@@ -435,6 +612,12 @@ def get_fixed(request):
 @permission_classes((PatientAuthenticated,))
 def get_daily(request):
     token = request.META.get('HTTP_TOKEN')
+    pagenation = request.data['pagenation']
+    sort = request.data['sort']
+    # 최신/오래, 체온
+    start_date = request.data['start_date']
+    end_date = request.data['end_date']
+    #날짜
     p_id = get_id(token)
 
     daily = PDaily.objects.prefetch_related('pdailysymptom_set', 'pdailypredict_set', 'pdailytemperature_set').\
@@ -471,14 +654,23 @@ def get_physicians(request):
     p_id = get_id(token)
 
     phy = DPRelation.objects.select_related('d').filter(p=p_id).order_by('add_time').\
-        values('relation_id','d_id', 'add_time', 'd__name', 'd__nation', 'd__region', 'd__hospital')
+        values('d_id', 'p_id', 'add_time', 'd__name', 'd__nation', 'd__region', 'd__hospital')
 
     phy_lst = []
     for row in phy:
         row_dic = row
-        row_dic['relation_id'] = row_dic['relation_id'] + 10000
+        row_dic['code'] = row_dic['p_id'] + 1000
         phy_lst.append(row_dic)
 
     return Response(phy_lst, status=HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes((PatientAuthenticated,))
+def generate_code(request):
+    token = request.META.get('HTTP_TOKEN')
+    p_id = get_id(token)
+
+    return Response({'code': p_id + 1000}, status=HTTP_201_CREATED)
 
 
