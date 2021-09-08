@@ -149,3 +149,52 @@ def physician_email_check(request):
             res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
             return res
 
+
+@swagger_auto_schema(
+	operation_description='Return an auth-token for the user account.',
+	method='post',
+	request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+        	'password': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password'),
+    	},
+		required=['email', 'password'],
+	),
+	responses={
+		HTTP_200_OK: PhysicianLogin,
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def physician_login(request):
+    email = request.data['email']
+    password = request.data['password']
+    login_obj = DLogin.objects.filter(email=email)
+    try:
+        try:
+            validate_email(email)
+        except:
+            raise ValueError('email_format')
+        else:
+            try:
+                db_pass = login_obj.get().password
+
+                if db_pass != password:
+                    raise ValueError('wrong_password')
+                else:
+                    token = PhysicianLogin(login_obj, many=True).data[0]
+
+                    return Response(token, status=HTTP_200_OK)
+
+            except PLogin.DoesNotExist:
+                raise ValueError('wrong_email')
+    except Exception as e:
+        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
