@@ -12,10 +12,10 @@ from drf_yasg import openapi
 
 
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
-from checkup_backend.permissions import PatientAuthenticated
+from checkup_backend.permissions import PhysicianAuthenticated
 
 from physician.serializers import *
-from physician.models import DLogin
+from physician.models import DLogin, DPRelation
 
 from tools import make_token, get_id
 
@@ -224,3 +224,31 @@ def token_refresh(request):
         return Response({'token': token}, status=HTTP_200_OK)
     except:
         return Response({'message': 'token_expire'}, status=HTTP_401_UNAUTHORIZED)
+
+
+
+
+@swagger_auto_schema(
+	operation_description='Link between patient and physician.',
+	method='post',
+	responses={
+		HTTP_201_CREATED: 'Success',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
+@api_view(['POST'])
+@permission_classes((PhysicianAuthenticated,))
+def add_patient(request):
+    token = request.META.get('HTTP_TOKEN')
+    d_id = get_id(token)
+    p_id = request.data['code'] - 1000 # TODO ---- change to setting code generation number
+
+    d_p_relation = DPRelation()
+    d_p_relation.p = p_id
+    d_p_relation.d = d_id
+    d_p_relation.add_time = datetime.datetime.now()
+    d_p_relation.save()
+
+    return Response(status=HTTP_201_CREATED)
+
+

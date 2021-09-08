@@ -1013,7 +1013,7 @@ def get_physicians(request):
 def generate_code(request):
     token = request.META.get('HTTP_TOKEN')
     p_id = get_id(token)
-
+    # TODO ---- change to setting code generation number
     return Response({'code': p_id + 1000}, status=HTTP_201_CREATED)
 
 
