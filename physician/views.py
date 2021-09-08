@@ -198,3 +198,29 @@ def physician_login(request):
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+
+@swagger_auto_schema(
+	operation_description='Refresh an auth-token.',
+	method='post',
+	responses={
+		HTTP_200_OK: 'Success',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def token_refresh(request):
+    token = request.META.get('HTTP_TOKEN')
+
+    if not token:
+        return Response({'message': 'no_token'}, status=HTTP_401_UNAUTHORIZED)
+
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
+        p_id = decoded_token['id']
+
+        token = make_token(p_id, auth='physician')
+
+        return Response({'token': token}, status=HTTP_200_OK)
+    except:
+        return Response({'message': 'token_expire'}, status=HTTP_401_UNAUTHORIZED)

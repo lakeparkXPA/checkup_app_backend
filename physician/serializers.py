@@ -19,5 +19,5 @@ class PhysicianLogin(serializers.ModelSerializer):
         data = super().to_representation(instance)
 
         if instance.pk:
-            return {'token': make_token(instance.pk)}
+            return {'token': make_token(instance.pk, auth='physician')}
         return data
