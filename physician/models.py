@@ -72,17 +72,6 @@ class DLoginAttempt(models.Model):
         db_table = 'd_login_attempt'
 
 
-class DOxygen(models.Model):
-    d_oxygen_id = models.BigAutoField(primary_key=True)
-    d = models.ForeignKey(DLogin, models.DO_NOTHING)
-    oxygen_start = models.DateField(blank=True, null=True)
-    oxygen_end = models.DateField(blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'd_oxygen'
-
-
 class DPRelation(models.Model):
     relation_id = models.BigAutoField(primary_key=True)
     d = models.ForeignKey(DLogin, models.DO_NOTHING)
@@ -94,6 +83,17 @@ class DPRelation(models.Model):
     class Meta:
         managed = False
         db_table = 'd_p_relation'
+
+
+class DOxygen(models.Model):
+    d_oxygen_id = models.BigAutoField(primary_key=True)
+    relation = models.ForeignKey(DPRelation, models.DO_NOTHING)
+    oxygen_start = models.DateField(blank=True, null=True)
+    oxygen_end = models.DateField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'd_oxygen'
 
 
 class DUpdate(models.Model):
@@ -137,6 +137,8 @@ class PDailyPredict(models.Model):
     p_daily = models.ForeignKey(PDaily, models.DO_NOTHING)
     prediction_result = models.FloatField(blank=True, null=True)
     prediction_explaination = models.TextField(blank=True, null=True)
+    oxygen = models.FloatField(blank=True, null=True)
+    icu = models.FloatField(blank=True, null=True)
 
     class Meta:
         managed = False

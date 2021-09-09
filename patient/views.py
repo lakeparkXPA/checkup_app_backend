@@ -751,6 +751,8 @@ class Daily(APIView):
         p_daily_predict = PDailyPredict(p_daily=p_daily)
         p_daily_predict.prediction_result = prediction['ml_probability'] * 100
         p_daily_predict.prediction_explaination = json.dumps(prediction)
+        p_daily_predict.oxygen = prediction['ml_probability']
+        p_daily_predict.icu = prediction['icu']
         p_daily_predict.save()
 
         previous_id_lst = list(PDaily.objects.filter(p_id=p_id).order_by('-p_daily_time').values('p_daily_id'))

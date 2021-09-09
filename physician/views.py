@@ -15,7 +15,7 @@ from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PhysicianAuthenticated
 
 from physician.serializers import *
-from physician.models import DLogin, DPRelation
+from physician.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
 
 from tools import make_token, get_id
 
@@ -241,7 +241,14 @@ def token_refresh(request):
 def add_patient(request):
     token = request.META.get('HTTP_TOKEN')
     d_id = get_id(token)
-    p_id = request.data['code'] - 1000 # TODO ---- change to setting code generation number
+    code = request.data['code']
+
+    # TODO ---- change to setting code generation number
+    if code > 1000:
+        p_id = code - 1000
+
+    else:
+        return Response(status=HTTP_400_BAD_REQUEST)
 
     d_p_relation = DPRelation()
     d_p_relation.p = p_id
@@ -252,3 +259,74 @@ def add_patient(request):
     return Response(status=HTTP_201_CREATED)
 
 
+@api_view(['GET'])
+@permission_classes((PhysicianAuthenticated,))
+def get_main(request):
+    token = request.META.get('HTTP_TOKEN')
+    d_id = get_id(token)
+
+    p_id_obj = DPRelation.objects.filter(d=d_id).values_list('p')
+    p_id_lst = [i[0] for i in p_id_obj]
+
+    main_lst = []
+    for p_id in p_id_lst:
+        main_dic = {}
+        last_seen_cnt = DUpdate.objects.select_related('relation_id').filter(Q(relation__d=d_id) &
+                                                                             Q(relation__p=p_id) &
+                                                                             Q(type__exact=1) &
+                                                                             Q(seen=0)).count()
+        if last_seen_cnt > 0:
+            main_dic['news'] = 1
+        else:
+            main_dic['news'] = 0
+
+        predict_lst = PDailyPredict.objects.select_related('p_daily__p').filter(p_daily__p__p_id=p_id).\
+                          order_by('-p_daily__p_daily_time').values_list('oxygen', 'icu')
+        if len(predict_lst) > 1:
+            this_oxygen = predict_lst[0][0]
+            this_icu = predict_lst[0][1]
+
+            previous_oxygen = predict_lst[1][0]
+            previous_icu = predict_lst[1][1]
+
+            if this_oxygen > previous_oxygen:
+                main_dic['oxygen_change'] = 1
+            elif this_oxygen < previous_oxygen:
+                main_dic['oxygen_change'] = -1
+            else:
+                main_dic['oxygen_change'] = 0
+
+            if this_icu > previous_icu:
+                main_dic['icu_change'] = 1
+            elif this_icu < previous_icu:
+                main_dic['icu_change'] = -1
+            else:
+                main_dic['icu_change'] = 0
+        else:
+            main_dic['oxygen_change'] = 0
+            main_dic['icu_change'] = 0
+
+        if len(predict_lst) > 0:
+            main_dic['oxygen'] = predict_lst[0][0]
+            main_dic['icu'] = predict_lst[0][1]
+        else:
+            main_dic['oxygen'] = None
+            main_dic['icu'] = None
+
+        p_info = PInfo.objects.get(p=p_id)
+        born = datetime.datetime.strptime(p_info.birth, "%Y-%m-%d")
+        today = datetime.datetime.today()
+
+        main_dic['name'] = p_info.name
+        main_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+        oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
+                                                                       Q(oxygen_end__isnull=True))
+        if oxygen_obj:
+            main_dic['oxygen_supply'] = 1
+        else:
+            main_dic['oxygen_supply'] = 0
+
+        main_lst.append(main_dic)
+
+    return Response(main_lst, status=HTTP_200_OK)
