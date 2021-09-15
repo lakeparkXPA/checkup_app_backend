@@ -15,7 +15,7 @@ from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PhysicianAuthenticated
 
 from physician.serializers import *
-from physician.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
+from patient.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
 
 from tools import make_token, get_id
 
@@ -259,6 +259,14 @@ def add_patient(request):
     return Response(status=HTTP_201_CREATED)
 
 
+@swagger_auto_schema(
+	operation_description='Get infos on patients.',
+	method='get',
+	responses={
+		HTTP_201_CREATED: 'Success',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
 def get_main(request):
@@ -281,7 +289,8 @@ def get_main(request):
             main_dic['news'] = 0
 
         predict_lst = PDailyPredict.objects.select_related('p_daily__p').filter(p_daily__p__p_id=p_id).\
-                          order_by('-p_daily__p_daily_time').values_list('oxygen', 'icu')
+            order_by('-p_daily__p_daily_time').values_list('oxygen', 'icu')
+
         if len(predict_lst) > 1:
             this_oxygen = predict_lst[0][0]
             this_icu = predict_lst[0][1]

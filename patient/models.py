@@ -32,6 +32,17 @@ class PLogin(models.Model):
         db_table = 'p_login'
 
 
+class PPass(models.Model):
+    p_pass_id = models.BigAutoField(primary_key=True)
+    p = models.ForeignKey('PLogin', models.DO_NOTHING)
+    code = models.IntegerField(blank=True, null=True)
+    p_pass_time = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'p_pass'
+
+
 class PInfo(models.Model):
     p_info_id = models.BigAutoField(primary_key=True)
     p = models.ForeignKey('PLogin', models.DO_NOTHING)
@@ -42,7 +53,6 @@ class PInfo(models.Model):
     class Meta:
         managed = False
         db_table = 'p_info'
-
 
 
 class DLogin(models.Model):

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from physician.models import *
+from patient.models import *
 
 from tools import make_token
 
