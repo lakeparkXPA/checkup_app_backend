@@ -254,7 +254,7 @@ def patient_edit(request):
     password2 = request.data['password2']
     name = request.data['name']
 
-    token = request.META.get('HTTP_TOKEN')
+
     try:
         if not email:
             raise ValueError('email_missing')
@@ -271,7 +271,7 @@ def patient_edit(request):
         if password2 != password1:
             raise ValueError('password_not_same')
 
-        p_id = get_id(token)
+        p_id = get_id(request)
 
         p_user = PLogin(p_id=p_id)
         p_user.email = email
@@ -471,8 +471,7 @@ def patient_password_reset(request):
 @api_view(['DELETE'])
 @permission_classes((PatientAuthenticated,))
 def patient_remove(request):
-    token = request.META.get('HTTP_TOKEN')
-    p_id = get_id(token)
+    p_id = get_id(request)
 
     patient_del = PLogin.objects.get(p_id=p_id)
     patient_del.delete()
@@ -492,8 +491,7 @@ class Fixed(APIView):
         },
     )
     def get(self, request, format=None):
-        token = request.META.get('HTTP_TOKEN')
-        p_id = get_id(token)
+        p_id = get_id(request)
         fixed = PFixed.objects.filter(p=p_id)
 
         return_dic = FixedGet(fixed, many=True).data[0]
@@ -569,8 +567,7 @@ class Fixed(APIView):
         },
     )
     def post(self, request, format=None):
-        token = request.META.get('HTTP_TOKEN')
-        p_id = get_id(token)
+        p_id = get_id(request)
 
         birth = request.data['birth']
         sex = request.data['sex']
@@ -786,8 +783,7 @@ class Daily(APIView):
         },
     )
     def get(self, request, format=None):
-        token = request.META.get('HTTP_TOKEN')
-        p_id = get_id(token)
+        p_id = get_id(request)
 
         pageindex = int(request.GET.get('pageindex'))
         pageoffset = int(request.GET.get('pageoffset'))
@@ -890,8 +886,8 @@ class Daily(APIView):
         },
     )
     def post(self, request, format=None):
-        token = request.META.get('HTTP_TOKEN')
-        p_id = get_id(token)
+
+        p_id = get_id(request)
 
         latitude = request.data['latitude']
         longitude = request.data['longitude']
@@ -1022,8 +1018,7 @@ class Daily(APIView):
 @api_view(['GET'])
 @permission_classes((PatientAuthenticated,))
 def get_physicians(request):
-    token = request.META.get('HTTP_TOKEN')
-    p_id = get_id(token)
+    p_id = get_id(request)
 
     phy = DPRelation.objects.select_related('d').filter(p=p_id).order_by('add_time').\
         values('d_id', 'p_id', 'add_time', 'd__name', 'd__nation', 'd__region', 'd__hospital')
@@ -1040,8 +1035,7 @@ def get_physicians(request):
 @api_view(['GET'])
 @permission_classes((PatientAuthenticated,))
 def generate_code(request):
-    token = request.META.get('HTTP_TOKEN')
-    p_id = get_id(token)
+    p_id = get_id(request)
     # TODO ---- change to setting code generation number
     return Response({'code': p_id + 1000}, status=HTTP_201_CREATED)
 

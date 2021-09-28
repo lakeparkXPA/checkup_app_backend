@@ -16,6 +16,7 @@ from checkup_backend.permissions import PhysicianAuthenticated
 
 from physician.serializers import *
 from patient.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
+from patient.serializers import FixedGet
 
 from tools import make_token, get_id
 
@@ -23,6 +24,14 @@ import jwt
 import datetime
 import requests
 import json
+
+# setting.php
+# discharge.php
+# patient.php?idx=
+# sendAlert.php
+# getFixed.php?idx=
+# getUpdates.php
+
 
 # TODO ---- 의료진 환자 추가 시 push 알림
 
@@ -192,7 +201,7 @@ def physician_login(request):
 
                     return Response(token, status=HTTP_200_OK)
 
-            except PLogin.DoesNotExist:
+            except DLogin.DoesNotExist:
                 raise ValueError('wrong_email')
     except Exception as e:
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
@@ -239,8 +248,7 @@ def token_refresh(request):
 @api_view(['POST'])
 @permission_classes((PhysicianAuthenticated,))
 def add_patient(request):
-    token = request.META.get('HTTP_TOKEN')
-    d_id = get_id(token)
+    d_id = get_id(request)
     code = request.data['code']
 
     # TODO ---- change to setting code generation number
@@ -270,10 +278,9 @@ def add_patient(request):
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
 def get_main(request):
-    token = request.META.get('HTTP_TOKEN')
-    d_id = get_id(token)
+    d_id = get_id(request)
 
-    p_id_obj = DPRelation.objects.filter(d=d_id).values_list('p')
+    p_id_obj = DPRelation.objects.filter(Q(d=d_id) & Q(discharged=0)).values_list('p')
     p_id_lst = [i[0] for i in p_id_obj]
 
     main_lst = []
@@ -339,3 +346,33 @@ def get_main(request):
         main_lst.append(main_dic)
 
     return Response(main_lst, status=HTTP_200_OK)
+
+
+
+@api_view(['GET'])
+@permission_classes((PhysicianAuthenticated,))
+def get_fixed(request):
+    d_id = get_id(request)
+    p_id = int(request.GET.get('idx'))
+    try:
+        if p_id:
+            try:
+                dp_relation = DPRelation.objects.filter(Q(p=p_id) & Q(d=d_id))
+                raise ValueError('relation_nonexistent')
+            except DPRelation.DoesNotExist:
+                fixed = PFixed.objects.filter(p=p_id)
+                return_dic = FixedGet(fixed, many=True).data[0]
+
+                p_info = PInfo.objects.get(p=p_id)
+                born = datetime.datetime.strptime(p_info.birth, "%Y-%m-%d")
+                today = datetime.datetime.today()
+
+                return_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+                return Response(return_dic, status=HTTP_200_OK)
+
+        else:
+            raise ValueError('p_id_nonexistent')
+    except Exception as e:
+        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+

@@ -50,6 +50,32 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = True
+
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'user-id',
+    'testserver',
+    'status',
+    'access-control-allow-methods',
+    'access-control-allow-origin ',
+    'token'
+]
+# CORS_EXPOSE_HEADERS = [
+#
+# ]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -146,11 +172,3 @@ SWAGGER_SETTINGS = {
          }
     }
 }
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'hjshljy@docl.org'
-EMAIL_HOST_PASSWORD = '!!15978dd'
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

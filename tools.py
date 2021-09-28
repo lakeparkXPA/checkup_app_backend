@@ -18,7 +18,8 @@ def make_token(token_id, auth='patient'):
     return jwt.encode(payload, SECRET_KEY, ALGORITHM)
 
 
-def get_id(token):
+def get_id(request):
+    token = request.META.get('HTTP_TOKEN')
     decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
     return decoded_token['id']
 
