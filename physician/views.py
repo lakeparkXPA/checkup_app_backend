@@ -25,12 +25,7 @@ import datetime
 import requests
 import json
 
-# setting.php
-# discharge.php
-# patient.php?idx=
-# sendAlert.php
-# getFixed.php?idx=
-# getUpdates.php
+
 
 
 # TODO ---- 의료진 환자 추가 시 push 알림
@@ -376,3 +371,35 @@ def get_fixed(request):
     except Exception as e:
         return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
 
+
+
+@api_view(['PUT'])
+@permission_classes((PhysicianAuthenticated,))
+def physician_edit(request):
+    d_id = get_id(request)
+
+    mode = request.data['mode']
+    d_login = DLogin.objects.get(d_id=d_id)
+    if mode == 'email':
+        email = request.data['email']
+        d_login.email = email
+    elif mode == 'password':
+        password = request.data['password']
+        d_login.password = password
+    elif mode == 'alert':
+        alert = request.data['alert']
+        if alert >= 0 & alert < 3:
+            d_login.alert = alert
+    else:
+        return Response({"message": 'wrong_mode'}, status=HTTP_400_BAD_REQUEST)
+
+    d_login.save()
+
+    return Response(status=HTTP_200_OK)
+
+
+# setting.php
+# discharge.php
+# patient.php?idx=
+# sendAlert.php
+# getUpdates.php
