@@ -1,18 +1,17 @@
-from django.db.models import Q, F
+from django.db.models import Q
 from django.core.validators import validate_email
 
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions, authentication
+from rest_framework import permissions
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED, \
-    HTTP_405_METHOD_NOT_ALLOWED
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
 from checkup_backend.permissions import PhysicianAuthenticated
+from checkup_backend import error_collection
 
 from physician.serializers import *
 from patient.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
@@ -26,13 +25,8 @@ import requests
 import json
 
 
-
-
-# TODO ---- 의료진 환자 추가 시 push 알림
-
-
 @swagger_auto_schema(
-	operation_description='Register account.',
+	operation_description='Register physician account.',
 	method='post',
 	request_body=openapi.Schema(
     	type=openapi.TYPE_OBJECT,
@@ -65,7 +59,10 @@ import json
 		HTTP_201_CREATED: openapi.Schema(
 				type=openapi.TYPE_STRING,
 				decription='auth-token'),
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+                              error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+                              error_collection.RAISE_400_EMAIL_EXIST.as_md() +
+                              error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -105,12 +102,14 @@ def physician_register(request):
 
         if d_serial.is_valid():
             d_serial.save()
-            return Response(status=HTTP_201_CREATED)
+            login_obj = DLogin.objects.filter(email=email)
+            token = PhysicianLogin(login_obj, many=True).data[0]
+            return Response(token, status=HTTP_201_CREATED)
         else:
             return Response(d_serial.errors, status=HTTP_400_BAD_REQUEST)
 
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
@@ -127,7 +126,8 @@ def physician_register(request):
 	),
 	responses={
 		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+        HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+                              error_collection.RAISE_400_EMAIL_EXIST.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -142,15 +142,15 @@ def physician_email_check(request):
             id_cnt = DLogin.objects.get(email=email)
             raise ValueError('email_exist')
         except DLogin.DoesNotExist:
-            res = Response({"success": True}, status=HTTP_200_OK)
+            res = Response( status=HTTP_200_OK)
             return res
 
     except Exception as e:
         if str(e) == 'email_exist':
-            res = Response({"success": True}, status=HTTP_200_OK)
+            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
             return res
         else:
-            res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
             return res
 
 
@@ -166,12 +166,17 @@ def physician_email_check(request):
         	'password': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Password'),
+            'push_token': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Push token'),
     	},
 		required=['email', 'password'],
 	),
 	responses={
-		HTTP_200_OK: PhysicianLogin,
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+        HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+        HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+                              error_collection.RAISE_400_WRONG_PASSWORD.as_md() +
+                              error_collection.RAISE_400_WRONG_EMAIL.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -192,6 +197,15 @@ def physician_login(request):
                 if db_pass != password:
                     raise ValueError('wrong_password')
                 else:
+                    try:
+                        push_token = request.data['push_token']
+                        if push_token:
+                            d_user = DLogin.objects.get(email=email)
+                            d_user.push_token = push_token
+                            d_user.save()
+                    except:
+                        pass
+
                     token = PhysicianLogin(login_obj, many=True).data[0]
 
                     return Response(token, status=HTTP_200_OK)
@@ -199,17 +213,19 @@ def physician_login(request):
             except DLogin.DoesNotExist:
                 raise ValueError('wrong_email')
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 
 @swagger_auto_schema(
 	operation_description='Refresh an auth-token.',
 	method='post',
-	responses={
-		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
-	},
+    responses={
+        HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+        HTTP_403_FORBIDDEN:
+            error_collection.RAISE_403_NO_TOKEN.as_md() +
+            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
+    },
 )
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
@@ -217,7 +233,7 @@ def token_refresh(request):
     token = request.META.get('HTTP_TOKEN')
 
     if not token:
-        return Response({'message': 'no_token'}, status=HTTP_401_UNAUTHORIZED)
+        return Response({'message': 'no_token'}, status=HTTP_403_FORBIDDEN)
 
     try:
         decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
@@ -227,7 +243,7 @@ def token_refresh(request):
 
         return Response({'token': token}, status=HTTP_200_OK)
     except:
-        return Response({'message': 'token_expire'}, status=HTTP_401_UNAUTHORIZED)
+        return Response({'message': 'token_expire'}, status=HTTP_403_FORBIDDEN)
 
 
 
@@ -235,9 +251,20 @@ def token_refresh(request):
 @swagger_auto_schema(
 	operation_description='Link between patient and physician.',
 	method='post',
+    request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'code': openapi.Schema(
+					type=openapi.TYPE_NUMBER,
+					description='Code'),
+    	},
+		required=['code'],
+	),
 	responses={
 		HTTP_201_CREATED: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_WRONG_CODE.as_md() +
+            error_collection.RAISE_400_RELATION_EXISTS.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -250,7 +277,7 @@ def add_patient(request):
         if code > 1001:
             p_id = code - 1001
         else:
-            raise ValueError('code_incorrect')
+            raise ValueError('wrong_code')
 
         try:
             dp_relation = DPRelation.objects.get(p=p_id, d=d_id)
@@ -311,8 +338,10 @@ def add_patient(request):
 	operation_description='Get infos on patients.',
 	method='get',
 	responses={
-		HTTP_201_CREATED: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_200_OK: 'Success',
+		HTTP_403_FORBIDDEN:
+            error_collection.RAISE_403_NO_TOKEN.as_md() +
+            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
 	},
 )
 @api_view(['GET'])
@@ -388,7 +417,24 @@ def get_main(request):
     return Response(main_lst, status=HTTP_200_OK)
 
 
-
+@swagger_auto_schema(
+	operation_description='Get fixed variables on patients.',
+	method='get',
+    manual_parameters=[
+            openapi.Parameter(
+                'pid',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Patient ID'
+            ),
+    ],
+	responses={
+	    HTTP_200_OK: 'Success',
+		HTTP_403_FORBIDDEN:
+            error_collection.RAISE_400_RELATION_NONEXISTENT.as_md() +
+            error_collection.RAISE_400_PID_NONEXISTENT.as_md(),
+	},
+)
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
 def get_fixed(request):
@@ -415,10 +461,37 @@ def get_fixed(request):
         else:
             raise ValueError('p_id_nonexistent')
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
-
+@swagger_auto_schema(
+	operation_description='Edit account. Select one mode (email, password, alert)',
+	method='put',
+	request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+            'mode': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Mode (email, password, alert)'),
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+        	'password': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password'),
+            'alert': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Name'),
+    	},
+	),
+	responses={
+		HTTP_201_CREATED: 'Edited.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+        error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_EMAIL_EXIST.as_md() +
+        error_collection.RAISE_400_WRONG_MODE.as_md(),
+	},
+)
 @api_view(['PUT'])
 @permission_classes((PhysicianAuthenticated,))
 def physician_edit(request):
@@ -426,24 +499,68 @@ def physician_edit(request):
 
     mode = request.data['mode']
     d_login = DLogin.objects.get(d_id=d_id)
-    if mode == 'email':
-        email = request.data['email']
-        d_login.email = email
-    elif mode == 'password':
-        password = request.data['password']
-        d_login.password = password
-    elif mode == 'alert':
-        alert = int(request.data['alert'])
-        if alert >= 0 & alert < 3:
-            d_login.alert = alert
-    else:
-        return Response({"message": 'wrong_mode'}, status=HTTP_400_BAD_REQUEST)
+    try:
+        if mode == 'email':
+            email = request.data['email']
+            if not email:
+                raise ValueError('email_missing')
+            try:
+                validate_email(email)
+            except:
+                raise ValueError('email_format')
+            else:
+                try:
+                    id_cnt = DLogin.objects.get(email=email)
+                    raise ValueError('email_exist')
+                except DLogin.DoesNotExist:
+                    pass
+            d_login.email = email
+        elif mode == 'password':
+            password = request.data['password']
+            d_login.password = password
+        elif mode == 'alert':
+            alert = int(request.data['alert'])
+            if alert >= 0 & alert < 3:
+                d_login.alert = alert
+        else:
+            raise ValueError('wrong_mode')
 
-    d_login.save()
+        d_login.save()
 
-    return Response(status=HTTP_200_OK)
+        return Response(status=HTTP_200_OK)
+    except Exception as e:
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+
+@swagger_auto_schema(
+	operation_description='Discharge patient.',
+	method='post',
+    request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'pid': openapi.Schema(
+					type=openapi.TYPE_NUMBER,
+					description='patient id'),
+            'reverse': openapi.Schema(
+					type=openapi.TYPE_NUMBER,
+					description='reverse the discharge or not'),
+            'worsened': openapi.Schema(
+					type=openapi.TYPE_BOOLEAN,
+					description='Worsened or not'),
+            'cause': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Cause of discharge'),
+    	},
+		required=['pid', 'reverse'],
+	),
+	responses={
+		HTTP_200_OK: 'Success',
+		HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_PID_MISSING.as_md() +
+            error_collection.RAISE_400_RELATION_NONEXISTENT.as_md(),
+	},
+)
 @api_view(['POST'])
 @permission_classes((PhysicianAuthenticated,))
 def physician_discharge(request):
@@ -451,8 +568,16 @@ def physician_discharge(request):
     p_id = request.data['pid']
     reverse = request.data['reverse']
 
+    if not p_id:
+        return Response({"code": "p_id_missing"}, status=HTTP_400_BAD_REQUEST)
+
     dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
+
+    if not dp_relation:
+        return Response({"code": "relation_nonexistent"}, status=HTTP_400_BAD_REQUEST)
+
     d_update = DUpdate(relation=dp_relation)
+
     if int(reverse) > 0:
         dp_relation.discharged = 0
 
@@ -480,6 +605,25 @@ def physician_discharge(request):
     return Response(status=HTTP_200_OK)
 
 
+
+@swagger_auto_schema(
+	operation_description='Get patients detail info.',
+	method='get',
+    manual_parameters=[
+            openapi.Parameter(
+                'pid',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='Patient ID'
+            ),
+    ],
+	responses={
+	    HTTP_200_OK: 'Success',
+        HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_PID_MISSING.as_md() +
+            error_collection.RAISE_400_RELATION_NONEXISTENT.as_md(),
+	},
+)
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
 def physician_patient(request):
@@ -491,6 +635,10 @@ def physician_patient(request):
         general = DPfixed(dp_relation_filter, many=True).data[0]
 
         dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
+
+        if not dp_relation:
+            return Response({"code": "relation_nonexistent"}, status=HTTP_400_BAD_REQUEST)
+
         d_update = DUpdate(relation_id=dp_relation)
         d_update.seen = 1
         d_update.save()
@@ -517,9 +665,16 @@ def physician_patient(request):
 
         return Response(general, status=HTTP_200_OK)
     else:
-        return Response({'code': 'patient_id_missing'}, status=HTTP_400_BAD_REQUEST)
+        return Response({'code': 'p_id_missing'}, status=HTTP_400_BAD_REQUEST)
 
 
+@swagger_auto_schema(
+	operation_description='Get patients and physician update notice list.',
+	method='get',
+	responses={
+	    HTTP_200_OK: 'Success',
+	},
+)
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
 def get_updates(request):
@@ -547,6 +702,26 @@ def get_updates(request):
     return Response(result, status=HTTP_200_OK)
 
 
+@swagger_auto_schema(
+	operation_description='Send push alert to patient to do check up.',
+	method='post',
+    request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'pid': openapi.Schema(
+					type=openapi.TYPE_NUMBER,
+					description='Patient Id'),
+    	},
+		required=['pid'],
+	),
+	responses={
+		HTTP_201_CREATED: 'Success',
+		HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_PID_MISSING.as_md() +
+            error_collection.RAISE_400_PATIENT_PUSH_TOKEN_NULL.as_md() +
+            error_collection.RAISE_400_RELATION_NONEXISTENT.as_md(),
+	},
+)
 @api_view(['POST'])
 @permission_classes((PhysicianAuthenticated,))
 def send_alert(request):
@@ -554,7 +729,11 @@ def send_alert(request):
     p_id = request.data['pid']
     try:
         try:
-            dp_relation = DPRelation.objects.get(Q(p=p_id) & Q(d=d_id))
+
+            if not p_id:
+                raise ValueError("p_id_missing")
+
+            dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
             p_obj = PLogin.objects.get(p_id=p_id)
             p_push = p_obj.push_token
             p_locale = p_obj.locale

@@ -1,13 +1,12 @@
 from django.db.models import Q, F
 from django.core.validators import validate_email
-from django.core.mail import EmailMessage
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, authentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_401_UNAUTHORIZED, \
-    HTTP_405_METHOD_NOT_ALLOWED, HTTP_205_RESET_CONTENT, HTTP_202_ACCEPTED
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, \
+    HTTP_405_METHOD_NOT_ALLOWED, HTTP_205_RESET_CONTENT, HTTP_202_ACCEPTED, HTTP_403_FORBIDDEN
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -230,8 +229,9 @@ def patient_login(request):
 	method='post',
 	responses={
 		HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
-		HTTP_400_BAD_REQUEST: error_collection.RAISE_403_NO_TOKEN.as_md() +
-        error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
+		HTTP_403_FORBIDDEN:
+            error_collection.RAISE_403_NO_TOKEN.as_md() +
+            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -240,7 +240,7 @@ def token_refresh(request):
     token = request.META.get('HTTP_TOKEN')
 
     if not token:
-        return Response({'message': 'no_token'}, status=HTTP_401_UNAUTHORIZED)
+        return Response({'message': 'no_token'}, status=HTTP_403_FORBIDDEN)
 
     try:
         decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
@@ -250,7 +250,7 @@ def token_refresh(request):
 
         return Response({'token': token}, status=HTTP_201_CREATED)
     except:
-        return Response({'message': 'token_expire'}, status=HTTP_401_UNAUTHORIZED)
+        return Response({'message': 'token_expire'}, status=HTTP_403_FORBIDDEN)
 
 
 @swagger_auto_schema(
@@ -530,7 +530,7 @@ class Fixed(APIView):
         operation_description='Get fixed data.',
         responses={
             HTTP_200_OK: '\n\n> **고정 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182.0,\n\t"weight": 102.0,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0\n\n}\n\n```',
-            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
     def get(self, request, format=None):
@@ -606,7 +606,7 @@ class Fixed(APIView):
         ),
         responses={
             HTTP_201_CREATED: 'Fixed loaded',
-            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
     def post(self, request, format=None):
@@ -729,7 +729,7 @@ class Fixed(APIView):
         ),
         responses={
             HTTP_201_CREATED: 'Fixed loaded',
-            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
     def put(self,request, format=None):
@@ -823,7 +823,7 @@ class Daily(APIView):
         responses={
             HTTP_200_OK: '\n\n> **일별 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"hasnext": 2,\n\t"items": [\n\t\t{\n\t\t\t"p_daily_id": 5,\n\t\t\t"p_daily_time": "2021-09-15T07:55:39Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 36.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t},\n\t\t{\n\t\t\t"p_daily_id": 6,\n\t\t\t"p_daily_time": "2021-09-15T07:55:47Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 37.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t}\n\t]\n\n}\n\n```',
 
-            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
     def get(self, request, format=None):
@@ -926,7 +926,7 @@ class Daily(APIView):
         ),
         responses={
             HTTP_201_CREATED: 'ok',
-            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
+            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
     def post(self, request, format=None):
