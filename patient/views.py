@@ -30,6 +30,7 @@ import random
 
 # TODO ---- get daily update,
 
+
 @swagger_auto_schema(
 	operation_description='Register account.',
 	method='post',
@@ -1056,6 +1057,37 @@ class Daily(APIView):
             pass
 
         return Response(status=HTTP_201_CREATED)
+
+
+@swagger_auto_schema(
+	operation_description='Set locale for account. ex) kr, en, ja',
+	method='post',
+    request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'locale': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description='Locale'),
+            },
+            required=['locale'],
+    ),
+	responses={
+		HTTP_201_CREATED: 'Locale set.'
+        ,
+	},
+)
+@api_view(['POST'])
+@permission_classes((PatientAuthenticated,))
+def locale_set(request):
+    p_id = get_id(request)
+    locale = request.data['locale']
+
+    p = PLogin.objects.get(p_id=p_id)
+    p.locale = locale
+    p.save()
+
+    return Response(status=HTTP_200_OK)
+
 
 
 @swagger_auto_schema(

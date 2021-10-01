@@ -332,12 +332,12 @@ def get_main(request):
         main_dic['name'] = p_info.name
         main_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
-        oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
-                                                                       Q(oxygen_end__isnull=True))
-        if oxygen_obj:
-            main_dic['oxygen_supply'] = 1
-        else:
-            main_dic['oxygen_supply'] = 0
+        # oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
+        #                                                                Q(oxygen_end__isnull=True))
+        # if oxygen_obj:
+        #     main_dic['oxygen_supply'] = 1
+        # else:
+        #     main_dic['oxygen_supply'] = 0
 
         main_lst.append(main_dic)
 
@@ -450,12 +450,12 @@ def physician_patient(request):
         d_update.seen = 1
         d_update.save()
 
-        d_oxygen = DOxygen.objects.filter(relation_id=dp_relation.relation_id).values('oxygen_start')
-        if d_oxygen:
-            general['oxygen_supply'] = 1
-            general['oxygen_start'] = d_oxygen[0]['oxygen_start']
-        else:
-            general['oxygen_supply'] = 0
+        # d_oxygen = DOxygen.objects.filter(relation_id=dp_relation.relation_id).values('oxygen_start')
+        # if d_oxygen:
+        #     general['oxygen_supply'] = 1
+        #     general['oxygen_start'] = d_oxygen[0]['oxygen_start']
+        # else:
+        #     general['oxygen_supply'] = 0
 
         p_push = PLogin.objects.get(p_id=p_id).push_token
         if p_push:
@@ -463,7 +463,7 @@ def physician_patient(request):
         else:
             general['receives_push'] = 0
 
-        daily = PDaily.objects.filter(p=p_id).order_by('p_daily_id')
+        daily = PDaily.objects.filter(p=p_id).order_by('-p_daily_id')
         daily_lst = DailyGet(daily, many=True).data
         for row in daily_lst:
             row['prediction_result'] = round(row['prediction_result'], 2)
@@ -477,6 +477,31 @@ def physician_patient(request):
 
 @api_view(['GET'])
 @permission_classes((PhysicianAuthenticated,))
-def physician_patient(request):
+def get_updates(request):
+    d_id = get_id(request)
+
+    result = []
+    relation_lst = DPRelation.objects.filter(d=d_id).values_list('relation_id', flat=True)
+    update_lst = DUpdate.objects.filter(relation_id__in=relation_lst).order_by('-d_update_id').\
+                     values('relation_id', 'type', 'seen','data', 'recorded_time')[:300]
+
+    for row in update_lst:
+        update_dic = {}
+        update_dic['patient_no'] = DPRelation.objects.get(relation_id=row['relation_id']).p
+        update_dic['name'] = PInfo.objects.get(p=update_dic['patient_no']).name
+        update_dic['type'] = row['type']
+        update_dic['seen'] = row['seen']
+        update_dic['time'] = row['recorded_time']
+        if row['type'] == 1:
+            data_decode = json.loads(row['data'])
+            update_dic['oxygen_delta'] = float(data_decode['oxygen'])
+            update_dic['icu_delta'] = float(data_decode['icu'])
+
+        result.append(update_dic)
+
+    return Response(result, status=HTTP_200_OK)
+
+
+
+
 # sendAlert.php
-# getUpdates.php
