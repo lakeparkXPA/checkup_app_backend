@@ -245,22 +245,29 @@ def token_refresh(request):
 def add_patient(request):
     d_id = get_id(request)
     code = request.data['code']
+    try:
+        # TODO ---- change to setting code generation number
+        if code > 1001:
+            p_id = code - 1001
+        else:
+            raise ValueError('code_incorrect')
 
-    # TODO ---- change to setting code generation number
-    if code > 1001:
-        p_id = code - 1001
+        try:
+            dp_relation = DPRelation.objects.get(p=p_id, d=d_id)
+            raise ValueError('relation_exists')
+        except DPRelation.DoesNotExist:
+            pass
+        d_p_relation = DPRelation()
+        d_p_relation.p = p_id
+        d_p_relation.d = d_id
+        d_p_relation.discharged = 0
+        d_p_relation.add_time = datetime.datetime.now()
+        d_p_relation.save()
 
-    else:
-        return Response(status=HTTP_400_BAD_REQUEST)
+        return Response(status=HTTP_201_CREATED)
+    except Exception as e:
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
-    d_p_relation = DPRelation()
-    d_p_relation.p = p_id
-    d_p_relation.d = d_id
-    d_p_relation.discharged = 0
-    d_p_relation.add_time = datetime.datetime.now()
-    d_p_relation.save()
-
-    return Response(status=HTTP_201_CREATED)
 
 
 @swagger_auto_schema(
@@ -349,13 +356,12 @@ def get_main(request):
 @permission_classes((PhysicianAuthenticated,))
 def get_fixed(request):
     d_id = get_id(request)
-    p_id = int(request.GET.get('idx'))
+    p_id = int(request.GET.get('pid'))
     try:
         if p_id:
             try:
-                dp_relation = DPRelation.objects.filter(Q(p=p_id) & Q(d=d_id))
-                raise ValueError('relation_nonexistent')
-            except DPRelation.DoesNotExist:
+                dp_relation = DPRelation.objects.get(p=p_id ,d=d_id)
+
                 fixed = PFixed.objects.filter(p=p_id)
                 return_dic = FixedGet(fixed, many=True).data[0]
 
@@ -367,6 +373,8 @@ def get_fixed(request):
 
                 return Response(return_dic, status=HTTP_200_OK)
 
+            except DPRelation.DoesNotExist:
+                raise ValueError('relation_nonexistent')
         else:
             raise ValueError('p_id_nonexistent')
     except Exception as e:
@@ -439,7 +447,7 @@ def physician_discharge(request):
 @permission_classes((PhysicianAuthenticated,))
 def physician_patient(request):
     d_id = get_id(request)
-    p_id = request.GET.get('idx')
+    p_id = request.GET.get('pid')
 
     if p_id:
         dp_relation_filter = DPRelation.objects.filter(d=d_id, p=p_id)
@@ -502,6 +510,49 @@ def get_updates(request):
     return Response(result, status=HTTP_200_OK)
 
 
+@api_view(['POST'])
+@permission_classes((PhysicianAuthenticated,))
+def send_alert(request):
+    d_id = get_id(request)
+    p_id = request.data['pid']
+    try:
+        try:
+            dp_relation = DPRelation.objects.get(Q(p=p_id) & Q(d=d_id))
+            p_obj = PLogin.objects.get(p_id=p_id)
+            p_push = p_obj.push_token
+            p_locale = p_obj.locale
+            if p_push:
+                if p_locale == 'kr':
+                    title = "기록을 작성해주세요"
+                    body = "의료진이 새로운 기록을 요청했습니다. 체크업 기록을 진행해주세요!"
+                elif p_locale == 'ja':
+                    title = "記録を作成してください"
+                    body = "医療陣があなたの新しい記録を要請しました。チェックアップ記録を進めてください！"
+                elif p_locale == 'in':
+                    title = ''
+                    body = ''
+                else:
+                    title = "A new request"
+                    body = "The medical team is wondering about your status. Please check your status with a new check-up!"
 
+                url = 'https://fcm.googleapis.com/fcm/send'
 
-# sendAlert.php
+                headers = {
+                    'Authorization': 'key=' + FIREBASE_KEY,
+                    'Content-Type': 'application/json; UTF-8',
+                }
+                contents = {
+                    'registration_ids': [p_push],
+                    'notification': {
+                        'title': title,
+                        'body': body
+                    }
+                }
+                requests.post(url, data=json.dumps(contents), headers=headers)
+                return Response(status=HTTP_200_OK)
+            else:
+                raise ValueError('patient_push_token_null')
+        except DPRelation.DoesNotExist:
+            raise ValueError('relation_nonexistent')
+    except Exception as e:
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
