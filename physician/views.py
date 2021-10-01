@@ -16,7 +16,7 @@ from checkup_backend.permissions import PhysicianAuthenticated
 
 from physician.serializers import *
 from patient.models import DLogin, DPRelation, DUpdate, PDailyPredict, DOxygen
-from patient.serializers import FixedGet
+from patient.serializers import FixedGet, DailyGet
 
 from tools import make_token, get_id
 
@@ -256,6 +256,7 @@ def add_patient(request):
     d_p_relation = DPRelation()
     d_p_relation.p = p_id
     d_p_relation.d = d_id
+    d_p_relation.discharged = 0
     d_p_relation.add_time = datetime.datetime.now()
     d_p_relation.save()
 
@@ -401,12 +402,81 @@ def physician_edit(request):
 @api_view(['POST'])
 @permission_classes((PhysicianAuthenticated,))
 def physician_discharge(request):
+    d_id = get_id(request)
     p_id = request.data['pid']
     reverse = request.data['reverse']
-    name = request.data['name']
+
+    dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
+    d_update = DUpdate(relation=dp_relation)
+    if int(reverse) > 0:
+        dp_relation.discharged = 0
+
+        d_update.type = 1
+
+    else:
+        dp_relation.discharged = 1
+        try:
+            worsened = request.data['worsened']
+            dp_relation.worsened = int(worsened)
+        except:
+            pass
+        try:
+            cause = request.data['cause']
+            dp_relation.cause = cause
+        except:
+            pass
+
+        d_update.type = 2
+
+    d_update.seen = 0
+    d_update.save()
+    dp_relation.save()
+
+    return Response(status=HTTP_200_OK)
 
 
-# discharge.php
-# patient.php?idx=
+@api_view(['GET'])
+@permission_classes((PhysicianAuthenticated,))
+def physician_patient(request):
+    d_id = get_id(request)
+    p_id = request.GET.get('idx')
+
+    if p_id:
+        dp_relation_filter = DPRelation.objects.filter(d=d_id, p=p_id)
+        general = DPfixed(dp_relation_filter, many=True).data[0]
+
+        dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
+        d_update = DUpdate(relation_id=dp_relation)
+        d_update.seen = 1
+        d_update.save()
+
+        d_oxygen = DOxygen.objects.filter(relation_id=dp_relation.relation_id).values('oxygen_start')
+        if d_oxygen:
+            general['oxygen_supply'] = 1
+            general['oxygen_start'] = d_oxygen[0]['oxygen_start']
+        else:
+            general['oxygen_supply'] = 0
+
+        p_push = PLogin.objects.get(p_id=p_id).push_token
+        if p_push:
+            general['receives_push'] = 1
+        else:
+            general['receives_push'] = 0
+
+        daily = PDaily.objects.filter(p=p_id).order_by('p_daily_id')
+        daily_lst = DailyGet(daily, many=True).data
+        for row in daily_lst:
+            row['prediction_result'] = round(row['prediction_result'], 2)
+
+        general['daily'] = daily_lst
+
+        return Response(general, status=HTTP_200_OK)
+    else:
+        return Response({'code': 'patient_id_missing'}, status=HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes((PhysicianAuthenticated,))
+def physician_patient(request):
 # sendAlert.php
 # getUpdates.php
