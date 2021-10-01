@@ -264,7 +264,44 @@ def add_patient(request):
         d_p_relation.add_time = datetime.datetime.now()
         d_p_relation.save()
 
+        p_obj = PLogin.objects.get(p_id=p_id)
+        p_push = p_obj.push_token
+        p_locale = p_obj.locale
+
+        d_name = DLogin.objects.get(d_id=d_id).name
+
+        if p_push:
+            if p_locale == 'kr':
+                title = "담당 의료진이 추가되었습니다."
+                body = "담당 의료진 " + d_name + " 이 회원님을 진료 환자 목록에 추가했습니다. 체크업 기록을 진행해주세요!"
+            elif p_locale == 'ja':
+                title = ""
+                body = ""
+            elif p_locale == 'in':
+                title = ''
+                body = ''
+            else:
+                title = "Medical Team member added."
+                body = "The medical team member " + d_name + " has added you to the patient list. " \
+                                                             "Please check your status with a new check-up!"
+
+            url = 'https://fcm.googleapis.com/fcm/send'
+
+            headers = {
+                'Authorization': 'key=' + FIREBASE_KEY,
+                'Content-Type': 'application/json; UTF-8',
+            }
+            contents = {
+                'registration_ids': [p_push],
+                'notification': {
+                    'title': title,
+                    'body': body
+                }
+            }
+            requests.post(url, data=json.dumps(contents), headers=headers)
+
         return Response(status=HTTP_201_CREATED)
+
     except Exception as e:
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
