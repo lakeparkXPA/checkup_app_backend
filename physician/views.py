@@ -247,8 +247,8 @@ def add_patient(request):
     code = request.data['code']
 
     # TODO ---- change to setting code generation number
-    if code > 1000:
-        p_id = code - 1000
+    if code > 1001:
+        p_id = code - 1001
 
     else:
         return Response(status=HTTP_400_BAD_REQUEST)
@@ -387,7 +387,7 @@ def physician_edit(request):
         password = request.data['password']
         d_login.password = password
     elif mode == 'alert':
-        alert = request.data['alert']
+        alert = int(request.data['alert'])
         if alert >= 0 & alert < 3:
             d_login.alert = alert
     else:
@@ -398,7 +398,14 @@ def physician_edit(request):
     return Response(status=HTTP_200_OK)
 
 
-# setting.php
+@api_view(['POST'])
+@permission_classes((PhysicianAuthenticated,))
+def physician_discharge(request):
+    p_id = request.data['pid']
+    reverse = request.data['reverse']
+    name = request.data['name']
+
+
 # discharge.php
 # patient.php?idx=
 # sendAlert.php

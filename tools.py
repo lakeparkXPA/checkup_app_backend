@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 import requests
 import json
 
-from checkup_backend.settings import ALGORITHM, SECRET_KEY, EMAIL_REFRESH_TOKEN, CLIENT_SECRET, CLIENT_ID
+from checkup_backend.settings import ALGORITHM, SECRET_KEY, EMAIL_REFRESH_TOKEN, CLIENT_SECRET, CLIENT_ID, FIREBASE_KEY
 
 
 def make_token(token_id, auth='patient'):
@@ -88,15 +88,44 @@ def sendmail(to, subject, message_text_html):
     requests.post(url, headers=request_header, data=json.dumps(payload))
 
 
+def textbody(data):
+    pushbody = "O2 probability "
+    if round(100 * data['oxygen']) < 0:
+        pushbody += "improved by " + str(round((-100) * data['oxygen'])) + "% and "
+    elif round(100 * data['oxygen']) > 0:
+        pushbody += "worsened by " + str(round(100 * data['oxygen'])) + "% and "
+    else:
+        pushbody += "is the same and "
+
+    pushbody += "ICU probability "
+
+    if round(100 * data['icu']) < 0:
+        pushbody += "improved by " + str(round((-100) * data['icu'])) + "%."
+    elif round(100 * data['icu']) > 0:
+        pushbody += "worsened by " + str(round(100 * data['icu'])) + "%."
+    else:
+        pushbody += "is the same."
+
+    return pushbody
 
 
+def sendpush(tokens, data):
+    #data = {'name', 'oxygen', 'icu'}
 
-code = 1234
-sendmail(
-                    to='hjshljy@gmail.com',
-                    subject='CheckUP Password Reset Confirmation Code.',
-                    message_text_html='CheckUp DOCL Password Reset<br>' +
-                    'Your code to reset the password of CheckUp DOCL is <br><br><h2>'+str(code)+
-                    '</h2><br><br> Please enter the site linked below and enter the code.<br>'+
-                    'https://testapi.docl.org <br><br>Thank you,<br>Sincerely DOCL.'
-                )
+    if len(tokens) > 0:
+        pushbody = textbody(data)
+
+        url = 'https://fcm.googleapis.com/fcm/send'
+
+        headers = {
+            'Authorization': 'key=' + FIREBASE_KEY,
+            'Content-Type': 'application/json; UTF-8',
+        }
+        contents = {
+            'registration_ids': tokens,
+            'notification': {
+                'title': str(data['name']) + ' has done a new check-up',
+                'body': pushbody
+            }
+        }
+        requests.post(url, data=json.dumps(contents), headers=headers)

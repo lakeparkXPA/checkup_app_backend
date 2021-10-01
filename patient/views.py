@@ -20,6 +20,7 @@ from patient.models import PLogin, PInfo, PFixed, PFixedUnique, PFixedCondition,
     PDailySymptom, PDailyTemperature, DPRelation, DUpdate, PPass
 
 from tools import bool_dic, get_id, make_token, sendmail
+from checkup_backend import error_collection
 
 import jwt
 import datetime
@@ -28,8 +29,6 @@ import json
 import random
 
 # TODO ---- get daily update,
-
-
 
 @swagger_auto_schema(
 	operation_description='Register account.',
@@ -52,6 +51,9 @@ import random
             'name': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Name'),
+            'push_token': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Push token'),
     	},
 		required=['email', 'password1', 'password2'],
 	),
@@ -59,7 +61,10 @@ import random
 		HTTP_201_CREATED: openapi.Schema(
 				type=openapi.TYPE_STRING,
 				decription='auth-token'),
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+        error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_EMAIL_EXIST.as_md() +
+        error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -91,6 +96,12 @@ def patient_register(request):
         p_user.email = email
         p_user.password = password1
         p_user.agreed = agreed
+        try:
+            push_token = request.data['push_token']
+            if push_token:
+                p_user.push_token = push_token
+        except:
+            pass
         p_user.save()
 
         p_fk = p_user
@@ -98,14 +109,16 @@ def patient_register(request):
         p_detail.p = p_fk
         p_detail.name = name
         p_detail.save()
+        login_obj = PLogin.objects.filter(email=email)
+        token = PatientLogin(login_obj, many=True).data[0]
 
-        return Response(status=HTTP_201_CREATED)
+        return Response({"token": token}, status=HTTP_201_CREATED)
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
-	operation_description='Check account email.',
+	operation_description='Check email duplication for account register.',
 	method='post',
 	request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
@@ -117,8 +130,11 @@ def patient_register(request):
 		required=['email'],
 	),
 	responses={
-		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_200_OK: 'Creatable',
+		HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+            error_collection.RAISE_400_EMAIL_EXIST.as_md()
+        ,
 	},
 )
 @api_view(['POST'])
@@ -133,15 +149,15 @@ def patient_email_check(request):
             id_cnt = PLogin.objects.get(email=email)
             raise ValueError('email_exist')
         except PLogin.DoesNotExist:
-            res = Response({"success": True}, status=HTTP_200_OK)
+            res = Response(status=HTTP_200_OK)
             return res
 
     except Exception as e:
         if str(e) == 'email_exist':
-            res = Response({"success": True}, status=HTTP_200_OK)
+            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
             return res
         else:
-            res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
             return res
 
 
@@ -157,12 +173,17 @@ def patient_email_check(request):
         	'password': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Password'),
+            'push_token': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Push token'),
     	},
 		required=['email', 'password'],
 	),
 	responses={
-		HTTP_200_OK: PatientLogin,
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_WRONG_PASSWORD.as_md() +
+        error_collection.RAISE_400_WRONG_EMAIL.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -183,6 +204,16 @@ def patient_login(request):
                 if db_pass != password:
                     raise ValueError('wrong_password')
                 else:
+
+                    try:
+                        push_token = request.data['push_token']
+                        if push_token:
+                            p_user = PLogin.objects.get(email=email)
+                            p_user.push_token = push_token
+                            p_user.save()
+                    except:
+                        pass
+
                     token = PatientLogin(login_obj, many=True).data[0]
 
                     return Response(token, status=HTTP_202_ACCEPTED)
@@ -190,15 +221,16 @@ def patient_login(request):
             except PLogin.DoesNotExist:
                 raise ValueError('wrong_email')
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
 	operation_description='Refresh an auth-token.',
 	method='post',
 	responses={
-		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_403_NO_TOKEN.as_md() +
+        error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -243,7 +275,10 @@ def token_refresh(request):
 	),
 	responses={
 		HTTP_201_CREATED: 'Edited.',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+        error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_EMAIL_EXIST.as_md() +
+        error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
 	},
 )
 @api_view(['PUT'])
@@ -284,11 +319,11 @@ def patient_edit(request):
 
         return Response(status=HTTP_202_ACCEPTED)
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
-	operation_description='Send email to find password.',
+	operation_description='Send email a code to find password.',
 	method='post',
     request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -300,8 +335,10 @@ def patient_edit(request):
             required=['email'],
     ),
 	responses={
-		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_201_CREATED: 'Email sent.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+        error_collection.RAISE_400_EMAIL_NONEXISTENT.as_md()
+        ,
 	},
 )
 @api_view(['POST'])
@@ -317,7 +354,7 @@ def patient_password_forget(request):
         except PLogin.DoesNotExist:
             raise ValueError('email_nonexistent')
 
-        code = random.randint(1, 10000)
+        code = random.randint(1000, 10000)
 
         sendmail(
             to=p_email,
@@ -341,12 +378,12 @@ def patient_password_forget(request):
         return Response(status=HTTP_201_CREATED)
 
     except Exception as e:
-        res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
         return res
 
 
 @swagger_auto_schema(
-	operation_description='Check code to reset password.',
+	operation_description='Check email given password reset code.',
 	method='get',
     manual_parameters=[
         openapi.Parameter(
@@ -364,7 +401,10 @@ def patient_password_forget(request):
     ],
 	responses={
 		HTTP_200_OK: 'Success',
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_CODE_MISSING.as_md() +
+        error_collection.RAISE_400_WRONG_CODE.as_md() +
+        error_collection.RAISE_400_TIME_EXPIRE.as_md() +
+        error_collection.RAISE_400_CODE_NONEXISTENT.as_md(),
 	},
 )
 @api_view(['GET'])
@@ -387,7 +427,7 @@ def patient_password_code(request):
             old_code = password.code
 
             if old_code != code:
-                raise ValueError('code_incorrect')
+                raise ValueError('wrong_code')
             code_time = password.p_pass_time
             time_passed = datetime.datetime.utcnow() - code_time
 
@@ -400,7 +440,7 @@ def patient_password_code(request):
             raise ValueError('code_nonexistent')
 
     except Exception as e:
-        res = Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
         return res
 
 
@@ -426,7 +466,9 @@ def patient_password_code(request):
 		HTTP_201_CREATED: openapi.Schema(
 				type=openapi.TYPE_STRING,
 				decription='auth-token'),
-		HTTP_400_BAD_REQUEST: 'Bad request.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_EMAIL_NONEXISTENT.as_md() +
+        error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
 	},
 )
 @api_view(['POST'])
@@ -454,10 +496,10 @@ def patient_password_reset(request):
         p_user = PLogin(email=email)
         p_user.password = password1
         p_user.save()
-
+        #token 추가
         return Response(status=HTTP_205_RESET_CONTENT)
     except Exception as e:
-        return Response({"message": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
@@ -486,7 +528,7 @@ class Fixed(APIView):
     @swagger_auto_schema(
         operation_description='Get fixed data.',
         responses={
-            HTTP_200_OK: FixedGet,
+            HTTP_200_OK: '\n\n> **고정 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182.0,\n\t"weight": 102.0,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0\n\n}\n\n```',
             HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
@@ -778,7 +820,8 @@ class Daily(APIView):
 
         ],
         responses={
-            HTTP_200_OK: DailyGet,
+            HTTP_200_OK: '\n\n> **일별 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"hasnext": 2,\n\t"items": [\n\t\t{\n\t\t\t"p_daily_id": 5,\n\t\t\t"p_daily_time": "2021-09-15T07:55:39Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 36.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t},\n\t\t{\n\t\t\t"p_daily_id": 6,\n\t\t\t"p_daily_time": "2021-09-15T07:55:47Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 37.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t}\n\t]\n\n}\n\n```',
+
             HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
@@ -1015,6 +1058,14 @@ class Daily(APIView):
         return Response(status=HTTP_201_CREATED)
 
 
+@swagger_auto_schema(
+	operation_description='Get linked physician list.',
+	method='get',
+	responses={
+		HTTP_200_OK: '\n\n> **연동된 의사 목록 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"d_id":1,\n\t"p_id":5,\n\t"add_time":"2021-09-29 04:19:23",\n\t"d__name":"DOCL",\n\t"d__nation":"korea",\n\t"d__region":"seoul",\n\t"d_hospital":"sev",\n\t"code":1005\n\n}\n\n```',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
 @api_view(['GET'])
 @permission_classes((PatientAuthenticated,))
 def get_physicians(request):
@@ -1026,17 +1077,25 @@ def get_physicians(request):
     phy_lst = []
     for row in phy:
         row_dic = row
-        row_dic['code'] = row_dic['p_id'] + 1000
+        row_dic['code'] = row_dic['p_id'] + 1001
         phy_lst.append(row_dic)
 
     return Response(phy_lst, status=HTTP_200_OK)
 
 
+@swagger_auto_schema(
+	operation_description='Generate code to link physician.',
+	method='get',
+	responses={
+		HTTP_201_CREATED: '\n\n> **의사 연동 코드 생성**\n\n```\n{\n\n\t"code": "1005"\n\n}\n\n```',
+		HTTP_400_BAD_REQUEST: 'Bad request.',
+	},
+)
 @api_view(['GET'])
 @permission_classes((PatientAuthenticated,))
 def generate_code(request):
     p_id = get_id(request)
     # TODO ---- change to setting code generation number
-    return Response({'code': p_id + 1000}, status=HTTP_201_CREATED)
+    return Response({'code': p_id + 1001}, status=HTTP_201_CREATED)
 
 

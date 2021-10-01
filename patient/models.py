@@ -89,6 +89,8 @@ class DPRelation(models.Model):
     add_time = models.DateTimeField(blank=True, null=True)
     discharged = models.IntegerField(blank=True, null=True)
     discharged_time = models.DateTimeField(blank=True, null=True)
+    worsened = models.IntegerField(blank=True, null=True)
+    cause = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False
