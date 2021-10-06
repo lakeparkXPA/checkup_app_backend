@@ -28,8 +28,6 @@ import json
 import random
 import copy
 
-# TODO ---- locale api 생성
-
 
 @swagger_auto_schema(
 	operation_description='Register account.',
