@@ -33,7 +33,7 @@ class PInfoData(serializers.ModelSerializer):
 class DPfixed(serializers.ModelSerializer):
     class Meta:
         model = DPRelation
-        fields = 'discharged'
+        fields = ('discharged',)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -45,7 +45,7 @@ class DPfixed(serializers.ModelSerializer):
 
 
             data.update(p_info)
-            born = datetime.datetime.strptime(data['birth'], "%Y-%m-%d")
+            born = datetime.datetime.strptime(p_info['birth'], "%Y-%m-%d")
             today = datetime.datetime.today()
 
             data['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))

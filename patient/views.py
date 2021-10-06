@@ -1,4 +1,4 @@
-from django.db.models import Q, F
+from django.db.models import Q
 from django.core.validators import validate_email
 
 from rest_framework.decorators import api_view, permission_classes
@@ -26,8 +26,9 @@ import datetime
 import requests
 import json
 import random
+import copy
 
-# TODO ---- get daily update,
+# TODO ---- locale api 생성
 
 
 @swagger_auto_schema(
@@ -112,7 +113,7 @@ def patient_register(request):
         login_obj = PLogin.objects.filter(email=email)
         token = PatientLogin(login_obj, many=True).data[0]
 
-        return Response({"token": token}, status=HTTP_201_CREATED)
+        return Response(token, status=HTTP_201_CREATED)
     except Exception as e:
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
@@ -130,9 +131,10 @@ def patient_register(request):
 		required=['email'],
 	),
 	responses={
-		HTTP_200_OK: 'Creatable',
+		HTTP_200_OK: 'registrable: True/False',
 		HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+            error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
             error_collection.RAISE_400_EMAIL_EXIST.as_md()
         ,
 	},
@@ -146,19 +148,21 @@ def patient_email_check(request):
         if not email:
             raise ValueError('email_missing')
         try:
+            validate_email(email)
+        except:
+            raise ValueError('email_format')
+        try:
             id_cnt = PLogin.objects.get(email=email)
-            raise ValueError('email_exist')
+            res = Response({"registrable": False}, status=HTTP_200_OK)
+            return res
         except PLogin.DoesNotExist:
-            res = Response(status=HTTP_200_OK)
+            res = Response({"registrable": True}, status=HTTP_200_OK)
             return res
 
     except Exception as e:
-        if str(e) == 'email_exist':
-            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
-            return res
-        else:
-            res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
-            return res
+        res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return res
+
 
 
 @swagger_auto_schema(
@@ -401,7 +405,7 @@ def patient_password_forget(request):
         ),
     ],
 	responses={
-		HTTP_200_OK: 'Success',
+		HTTP_200_OK: 'registrable: True/False',
 		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_CODE_MISSING.as_md() +
         error_collection.RAISE_400_WRONG_CODE.as_md() +
         error_collection.RAISE_400_TIME_EXPIRE.as_md() +
@@ -435,7 +439,7 @@ def patient_password_code(request):
             if time_passed > datetime.timedelta(minutes=20):
                 raise ValueError('time_expire')
             password.delete()
-            return Response(status=HTTP_200_OK)
+            return Response({"registrable": True}, status=HTTP_200_OK)
 
         except PPass.DoesNotExist:
             raise ValueError('code_nonexistent')
@@ -529,7 +533,7 @@ class Fixed(APIView):
     @swagger_auto_schema(
         operation_description='Get fixed data.',
         responses={
-            HTTP_200_OK: '\n\n> **고정 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182.0,\n\t"weight": 102.0,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0\n\n}\n\n```',
+            HTTP_200_OK: '\n\n> **고정 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182.0,\n\t"weight": 102.0,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0,\n\t"email": "test@docl.org"\n\n}\n\n```',
             HTTP_403_FORBIDDEN: 'Bad request. No Token.',
         },
     )
@@ -537,7 +541,11 @@ class Fixed(APIView):
         p_id = get_id(request)
         fixed = PFixed.objects.filter(p=p_id)
 
-        return_dic = FixedGet(fixed, many=True).data[0]
+        fixed_get = FixedGet(fixed, many=True).data
+        if fixed_get:
+            return_dic = fixed_get[0]
+        else:
+            return_dic = {}
         return Response(return_dic, status=HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -633,133 +641,21 @@ class Fixed(APIView):
         p_user = PLogin(p_id=p_id)
 
         try:
-            id_cnt = PFixed.objects.get(p_id=p_id)
-            return Response({'message': 'fixed_exist'}, status=HTTP_405_METHOD_NOT_ALLOWED)
+            p_fixed = PFixed.objects.get(p_id=p_id)
+            p_detail = PInfo.objects.get(p=p_user)
+            p_fixed_condition_id = PFixedCondition.objects.get(p_fixed=p_fixed.p_fixed_id).p_fixed_condition_id
+            p_fixed_unique_id = PFixedUnique.objects.get(p_fixed=p_fixed.p_fixed_id).p_fixed_unique_id
+
+            p_fixed_condition = PFixedCondition(p_fixed_condition_id=p_fixed_condition_id, p_fixed=p_fixed, **condition_data)
+            p_fixed_unique = PFixedUnique(p_fixed_unique_id=p_fixed_unique_id, p_fixed=p_fixed, **unique_data)
+
         except PFixed.DoesNotExist:
-            pass
-        p_fixed = PFixed(p_id=p_id)
+            p_fixed = PFixed(p_id=p_id)
+            p_fixed.save()
 
-        p_fixed.save()
-        p_detail = PInfo(p=p_user)
-
-        res = Response(status=HTTP_201_CREATED)
-
-        p_detail.birth = birth
-        p_detail.sex = sex
-        p_detail.save()
-
-        p_fixed.weight = weight
-        p_fixed.height = height
-        p_fixed.adl = adl
-        p_fixed.smoking = smoking
-        p_fixed.p_fixed_date = datetime.datetime.utcnow()
-        p_fixed.save()
-
-        p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
-        p_fixed_condition.save()
-
-        p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
-        p_fixed_unique.save()
-
-        return res
-
-    @swagger_auto_schema(
-        operation_description='Update fixed data.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'birth': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='Birth'
-                ),
-                'sex': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='Sex\n1: Male\n2: Female'
-                ),
-                'smoking': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='Smoking type\n\
-    						1: Never\n\
-    						2: Stopped\n\
-    						3: Smoking'
-                ),
-                'height': openapi.Schema(
-                    type=openapi.TYPE_NUMBER,
-                    description='Height'
-                ),
-                'weight': openapi.Schema(
-                    type=openapi.TYPE_NUMBER,
-                    description='Weight'
-                ),
-                'adl': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='Adl type\n\
-    						1: No Assist\n\
-    						2: Partially-assisted\n\
-    						3: Fully-assisted'
-                ),
-                'condition': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Items(type=openapi.TYPE_STRING),
-                    description='chronic_cardiac_disease\n\
-                    chronic_neurologic_disorder\n\
-                    copd\n\
-                    asthma\n\
-                    chronic_liver_disease\n\
-                    hiv\n\
-                    autoimmune_disease\n\
-                    dm\n\
-                    hypertension\n\
-                    ckd\n\
-                    cancer\n\
-                    heart_failure\n\
-                    dementia\n\
-                    chronic_hematologic_disorder'
-                ),
-                'unique': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Items(type=openapi.TYPE_STRING),
-                    description='transplantation\n\
-                    immunosuppress_agent\n\
-                    chemotherapy\n\
-                    pregnancy'
-                ),
-            },
-            required=['birth', 'sex', 'smoking', 'height', 'weight', 'adl', 'condition','unique'],
-        ),
-        responses={
-            HTTP_201_CREATED: 'Fixed loaded',
-            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
-        },
-    )
-    def put(self,request, format=None):
-        token = request.META.get('HTTP_TOKEN')
-        p_id = get_id(token)
-
-        birth = request.data['birth']
-        sex = request.data['sex']
-
-        smoking = request.data['smoking']
-        height = request.data['height']
-        weight = request.data['weight']
-        adl = request.data['adl']
-
-        condition = request.data['condition']
-        condition_lst = ['chronic_cardiac_disease', 'chronic_neurologic_disorder', 'copd', 'asthma',
-                         'chronic_liver_disease', 'hiv', 'autoimmune_disease', 'dm', 'hypertension', 'ckd', 'cancer',
-                         'heart_failure', 'dementia', 'chronic_hematologic_disorder']
-        unique = request.data['unique']
-        unique_lst = ['transplantation', 'immunosuppress_agent', 'chemotherapy', 'pregnancy']
-
-        condition_data = bool_dic(condition, condition_lst)
-        unique_data = bool_dic(unique, unique_lst)
-
-        p_user = PLogin(p_id=p_id)
-
-
-        p_fixed = PFixed.objects.get(p_id=p_id)
-        p_detail = PInfo.objects.get(p=p_user)
-        res = Response(status=HTTP_200_OK)
+            p_detail = PInfo(p=p_user)
+            p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
+            p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
 
         p_detail.birth = birth
         p_detail.sex = sex
@@ -772,13 +668,10 @@ class Fixed(APIView):
         p_fixed.p_fixed_date = datetime.datetime.utcnow()
         p_fixed.save()
 
-        p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
         p_fixed_condition.save()
-
-        p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
         p_fixed_unique.save()
 
-        return res
+        return Response(status=HTTP_201_CREATED)
 
 
 class Daily(APIView):
@@ -832,8 +725,17 @@ class Daily(APIView):
         pageindex = int(request.GET.get('pageindex'))
         pageoffset = int(request.GET.get('pageoffset'))
         sort = request.GET.get('sort')
-        start_date = datetime.datetime.strptime(request.GET.get('start_date'), '%Y-%m-%d') - datetime.timedelta(days=1)
-        end_date = datetime.datetime.strptime(request.GET.get('end_date'), '%Y-%m-%d') + datetime.timedelta(days=1)
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+
+        if start_date:
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d') - datetime.timedelta(days=1)
+        else:
+            start_date = datetime.datetime.now() - datetime.timedelta(days=8)
+        if end_date:
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        else:
+            end_date = datetime.datetime.now() + datetime.timedelta(days=1)
 
         order_lst = []
         if sort == 'high_temp':
@@ -848,7 +750,7 @@ class Daily(APIView):
             filter(Q(p=p_id) & Q(p_daily_time__range=(start_date, end_date))).order_by(*order_lst)
         daily_lst = DailyGet(daily, many=True).data
         page_num, last_num = divmod(len(daily_lst), pageoffset)
-
+        #Has NExt 수정
         if pageindex == 0:
             daily_paginated = daily_lst[:pageoffset]
             if page_num == 0:
@@ -863,6 +765,9 @@ class Daily(APIView):
             else:
                 daily_paginated = daily_lst[-last_num:]
             hasnext = 0
+        elif pageindex > page_num:
+            hasnext = 0
+            daily_paginated = []
         else:
             daily_paginated = daily_lst[pageindex*pageoffset: (pageindex+1)*pageoffset]
             if page_num == pageindex:
@@ -877,7 +782,7 @@ class Daily(APIView):
         return Response(daily_get, status=HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_description='Save daily data.',
+        operation_description='Save or edit daily data. (If record exist edit, else save)',
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -960,6 +865,8 @@ class Daily(APIView):
         data.update(p_fixed_unique)
         data['temp'] = temp
 
+        return_data = copy.deepcopy(data)
+
         if temp_capable == 0:
             data['temp'] = 36.5
         if antipyretics > 0 and temp < 37.5:
@@ -968,9 +875,20 @@ class Daily(APIView):
         prediction = json.loads(requests.get("https://model.docl.org/predict", json.dumps(data)).content)
         prediction_icu = json.loads(requests.get("https://model.docl.org/predict_icu", json.dumps(data)).content)
         prediction['icu'] = prediction_icu['probability']
+
+        return_dic = {}
+        return_dic['result'] = prediction['ml_probability']
+        prediction_result = prediction['ml_probability'] * 100
+        recorded_time = datetime.datetime.utcnow()
+
+        return_data['prediction_result'] = prediction_result
+        return_data['prediction_explaination'] = json.dumps(prediction)
+        return_data['recorded_time'] = recorded_time
+        return_dic['data'] = return_data
+
         p_obj = PLogin.objects.get(p_id=p_id)
         p_daily = PDaily(p=p_obj)
-        p_daily.p_daily_time = datetime.datetime.utcnow()
+        p_daily.p_daily_time = recorded_time
         p_daily.latitude = latitude
         p_daily.longitude = longitude
         p_daily.save()
@@ -985,7 +903,7 @@ class Daily(APIView):
         p_daily_temp.save()
 
         p_daily_predict = PDailyPredict(p_daily=p_daily)
-        p_daily_predict.prediction_result = prediction['ml_probability'] * 100
+        p_daily_predict.prediction_result = prediction_result
         p_daily_predict.prediction_explaination = json.dumps(prediction)
         p_daily_predict.oxygen = prediction['ml_probability']
         p_daily_predict.icu = prediction['icu']
@@ -1015,6 +933,7 @@ class Daily(APIView):
                 d_update.type = 1
                 d_update.data = update_json
                 d_update.seen = 0
+                d_update.recorded_time = datetime.datetime.now()
                 d_update.save()
 
                 if row['d__push_token'] != "" and row['d__alert'] < 2:
@@ -1056,11 +975,11 @@ class Daily(APIView):
         else:
             pass
 
-        return Response(status=HTTP_201_CREATED)
+        return Response(return_dic, status=HTTP_201_CREATED)
 
 
 @swagger_auto_schema(
-	operation_description='Set locale for account. ex) kr, en, ja',
+	operation_description='Set locale for account. ex) kr, en, ja, id',
 	method='post',
     request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,

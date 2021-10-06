@@ -49,7 +49,11 @@ class FixedGet(serializers.ModelSerializer):
             f_unique.pop('p_fixed_unique_id')
             f_unique.pop('p_fixed')
 
-            p_info = dict(list(PInfo.objects.filter(p=data['p_id']).values('name', 'birth', 'sex'))[0])
+            try:
+                p_info = dict(list(PInfo.objects.filter(p=data['p_id']).values('name', 'birth', 'sex'))[0])
+                p_info['email'] = PLogin.objects.get(p_id=data['p_id']).email
+            except:
+                p_info = {"name": "", "birth": "", "sex": "", "email": ""}
 
             data.update(f_condition)
             data.update(f_unique)
