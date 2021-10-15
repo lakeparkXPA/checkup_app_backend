@@ -104,7 +104,7 @@ def patient_register(request):
         p_user.save()
 
         p_fk = p_user
-        p_detail = PInfo()
+        p_detail = PInfo(p=p_user)
         p_detail.p = p_fk
         p_detail.name = name
         p_detail.save()
@@ -194,6 +194,7 @@ def patient_login(request):
     email = request.data['email']
     password = request.data['password']
     login_obj = PLogin.objects.filter(email=email)
+
     try:
         try:
             validate_email(email)
@@ -217,6 +218,14 @@ def patient_login(request):
                         pass
 
                     token = PatientLogin(login_obj, many=True).data[0]
+
+                    try:
+                        p_user = PLogin.objects.get(email=email)
+                        p_fixed = PFixed.objects.get(p=p_user.p_id)
+                        basic_info = True
+                    except PFixed.DoesNotExist:
+                        basic_info = False
+                    token['basic_info'] = basic_info
 
                     return Response(token, status=HTTP_202_ACCEPTED)
 
@@ -557,14 +566,14 @@ class Fixed(APIView):
                 ),
                 'sex': openapi.Schema(
                     type=openapi.TYPE_INTEGER,
-                    description='Sex\n1: Male\n2: Female'
+                    description='Sex\n0: Male\n1: Female'
                 ),
                 'smoking': openapi.Schema(
                     type=openapi.TYPE_INTEGER,
                     description='Smoking type\n\
-    						1: Never\n\
-    						2: Stopped\n\
-    						3: Smoking'
+    						0: Never\n\
+    						1: Stopped\n\
+    						2: Smoking'
                 ),
                 'height': openapi.Schema(
                     type=openapi.TYPE_NUMBER,
@@ -577,9 +586,9 @@ class Fixed(APIView):
                 'adl': openapi.Schema(
                     type=openapi.TYPE_INTEGER,
                     description='Adl type\n\
-    						1: No Assist\n\
-    						2: Partially-assisted\n\
-    						3: Fully-assisted'
+    						0: No Assist\n\
+    						1: Partially-assisted\n\
+    						2: Fully-assisted'
                 ),
                 'condition': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
@@ -636,11 +645,11 @@ class Fixed(APIView):
         condition_data = bool_dic(condition, condition_lst)
         unique_data = bool_dic(unique, unique_lst)
 
-        p_user = PLogin(p_id=p_id)
+
 
         try:
-            p_fixed = PFixed.objects.get(p_id=p_id)
-            p_detail = PInfo.objects.get(p=p_user)
+            p_fixed = PFixed.objects.get(p=p_id)
+            p_detail = PInfo.objects.get(p=p_id)
             p_fixed_condition_id = PFixedCondition.objects.get(p_fixed=p_fixed.p_fixed_id).p_fixed_condition_id
             p_fixed_unique_id = PFixedUnique.objects.get(p_fixed=p_fixed.p_fixed_id).p_fixed_unique_id
 
@@ -648,10 +657,11 @@ class Fixed(APIView):
             p_fixed_unique = PFixedUnique(p_fixed_unique_id=p_fixed_unique_id, p_fixed=p_fixed, **unique_data)
 
         except PFixed.DoesNotExist:
-            p_fixed = PFixed(p_id=p_id)
+            p_user = PLogin.objects.get(p_id=p_id)
+            p_fixed = PFixed(p=p_user)
             p_fixed.save()
 
-            p_detail = PInfo(p=p_user)
+            p_detail = PInfo.objects.get(p=p_id)
             p_fixed_condition = PFixedCondition(p_fixed=p_fixed, **condition_data)
             p_fixed_unique = PFixedUnique(p_fixed=p_fixed, **unique_data)
 
@@ -727,18 +737,18 @@ class Daily(APIView):
         end_date = request.GET.get('end_date')
 
         if start_date:
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d') - datetime.timedelta(days=1)
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
         else:
             start_date = datetime.datetime.now() - datetime.timedelta(days=8)
         if end_date:
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
         else:
-            end_date = datetime.datetime.now() + datetime.timedelta(days=1)
+            end_date = datetime.datetime.now()
 
         order_lst = []
         if sort == 'high_temp':
-            order_lst.append('-pdailytemperature__temp')
             order_lst.append('-p_daily_id')
+            order_lst.append('-pdailytemperature__temp')
         elif sort == 'latest':
             order_lst.append('-p_daily_id')
         else:
@@ -748,7 +758,7 @@ class Daily(APIView):
             filter(Q(p=p_id) & Q(p_daily_time__range=(start_date, end_date))).order_by(*order_lst)
         daily_lst = DailyGet(daily, many=True).data
         page_num, last_num = divmod(len(daily_lst), pageoffset)
-        #Has NExt 수정
+
         if pageindex == 0:
             daily_paginated = daily_lst[:pageoffset]
             if page_num == 0:
@@ -859,19 +869,35 @@ class Daily(APIView):
 
         data = {}
         data.update(symptom_data)
+        if temp:
+            data['temp'] = float(temp)
+        else:
+            data['temp'] = 36.5
+        return_data = copy.deepcopy(data)
+
         data.update(p_fixed_condition)
         data.update(p_fixed_unique)
-        data['temp'] = temp
+        data['smoking'] = p_fixed.smoking
+        data['adl'] = p_fixed.adl
+        data['lethalgic'] = 0
 
-        return_data = copy.deepcopy(data)
+        p_info = PInfo.objects.get(p=p_id)
+        born = p_info.birth
+        today = datetime.datetime.today()
+
+        data['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        data['sex'] = p_info.sex
+        data['age'] = 10
+
+        data['mentality'] = None
 
         if temp_capable == 0:
             data['temp'] = 36.5
-        if antipyretics > 0 and temp < 37.5:
+        if antipyretics > 0 and data['temp'] < 37.5:
             data['temp'] = 37.5
 
-        prediction = json.loads(requests.get("https://model.docl.org/predict", json.dumps(data)).content)
-        prediction_icu = json.loads(requests.get("https://model.docl.org/predict_icu", json.dumps(data)).content)
+        prediction = json.loads(requests.get("https://model.docl.org/predict", params=data).content)
+        prediction_icu = json.loads(requests.get("https://model.docl.org/predict_icu", params=data).content)
         prediction['icu'] = prediction_icu['probability']
 
         return_dic = {}
@@ -881,7 +907,8 @@ class Daily(APIView):
 
         return_data['prediction_result'] = prediction_result
         return_data['prediction_explaination'] = json.dumps(prediction)
-        return_data['recorded_time'] = recorded_time
+        return_data['p_daily_time'] = recorded_time
+        return_data['temp'] = temp
         return_dic['data'] = return_data
 
         p_obj = PLogin.objects.get(p_id=p_id)

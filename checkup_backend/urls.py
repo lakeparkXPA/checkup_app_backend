@@ -6,6 +6,7 @@ from rest_framework import permissions
 
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from checkup_backend.settings import DEBUG
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -17,7 +18,7 @@ schema_view = get_schema_view(
       license=openapi.License(name="BSD License"),
     ),
     url='https://testapi.docl.org/dev/django',
-    public=True,
+    public=DEBUG,
     permission_classes=(permissions.AllowAny,),
 )
 

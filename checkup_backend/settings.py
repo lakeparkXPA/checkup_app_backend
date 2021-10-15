@@ -12,24 +12,28 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 
 from pathlib import Path
 import os
+import json
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Key file management
+key_file = os.path.join(BASE_DIR, 'key.json')
+
+with open(key_file) as f:
+    key = json.loads(f.read())
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-u4y2_&y=lfig6pc!^#dwwuvi8!rb5x*h&%7y!vh#h%j$wig-wv'
-ALGORITHM = 'HS256'
-FIREBASE_KEY = "AAAAxEMNyZU:APA91bELOZLHi5nse3113Gdsvp-WZseJEdEeKuH8qDiVKcp3O96V5K9onbxIr9mOI50u4Zx9RQkqTjuuycRheSAWsF7r3L0E3yBgRfMHSq3cbdwziXV5qmbmOMHh48uG4AY-cUzW4aTJ"
-EMAIL_REFRESH_TOKEN = "1//0eDm5hpar89yPCgYIARAAGA4SNwF-L9IreSDveHHfQFw4SoNTMErx-cpuIJSK5IVelSUGLheSGXKfh5bGHY-9k8J0PCjE9Xedgno"
-CLIENT_ID = '623035508439-m5h19n01nasjgi553af9v1e66jisg1e0.apps.googleusercontent.com'
-CLIENT_SECRET = '3k0-0M8dPU_adiPq4QY70TnH'
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['*']
+SECRET_KEY = key['SECRET_KEY']
+ALGORITHM = key['ALGORITHM']
+FIREBASE_KEY = key['FIREBASE_KEY']
+EMAIL_REFRESH_TOKEN = key['EMAIL_REFRESH_TOKEN']
+CLIENT_ID = key['CLIENT_ID']
+CLIENT_SECRET = key['CLIENT_SECRET']
+DEBUG = key['DEBUG']
+ALLOWED_HOSTS = key['ALLOWED_HOSTS']
 
 
 # Application definition
@@ -111,15 +115,19 @@ WSGI_APPLICATION = 'checkup_backend.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
-
+DATABASE_NAME = key['DATABASE_NAME']
+DATABASE_USER = key['DATABASE_USER']
+DATABASE_PASSWORD = key['DATABASE_PASSWORD']
+DATABASE_HOST = key['DATABASE_HOST']
+DATABASE_PORT = key['DATABASE_PORT']
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'checkup_django',
-        'USER': 'admin',
-        'PASSWORD': 'docl2020!!',
-        'HOST': 'groups-test-db.clj0rbkrqp2f.ap-northeast-2.rds.amazonaws.com',
-        'PORT': '3306',
+        'NAME': DATABASE_NAME,
+        'USER': DATABASE_USER,
+        'PASSWORD': DATABASE_PASSWORD,
+        'HOST': DATABASE_HOST,
+        'PORT': DATABASE_PORT,
     },
 }
 
