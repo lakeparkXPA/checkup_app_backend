@@ -411,7 +411,7 @@ def add_patient(request):
 	operation_description='Get basic info on patients.',
 	method='get',
 	responses={
-		HTTP_200_OK: '\n\n> **환자 목록 및 기본 정보 반환 (반환 예 하단 참고)**\n\n```\n[\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28\n\t},\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28\n\t},\n...]\n\n```',
+		HTTP_200_OK: '\n\n> **환자 목록 및 기본 정보 반환 (반환 예 하단 참고)**\n\n```\n[\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28\n\t},\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28,\n\t\t"sex":0,\n\t\t"discharged":1,\n\t\t"dyspnea":0\n\t},\n...]\n\n```',
 		HTTP_403_FORBIDDEN:
             error_collection.RAISE_403_NO_TOKEN.as_md() +
             error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
@@ -478,6 +478,12 @@ def get_main(request):
 
         main_dic['name'] = p_info.name
         main_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        main_dic['sex'] = p_info.sex
+
+        main_dic['discharged'] = True if DPRelation.objects.filter(p=p_id, discharged=1) else False
+        main_dic['dyspnea'] = PDailySymptom.objects.select_related('p_daily__p').filter(p_daily__p=p_id).\
+            latest('p_daily').dyspnea
+
 
         # oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
         #                                                                Q(oxygen_end__isnull=True))
