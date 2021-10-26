@@ -480,7 +480,7 @@ def get_main(request):
         main_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
         main_dic['sex'] = p_info.sex
 
-        main_dic['discharged'] = True if DPRelation.objects.filter(p=p_id, discharged=1) else False
+        main_dic['discharged'] = 1 if DPRelation.objects.filter(p=p_id, discharged=1) else 0
         main_dic['dyspnea'] = PDailySymptom.objects.select_related('p_daily__p').filter(p_daily__p=p_id).\
             latest('p_daily').dyspnea
 
