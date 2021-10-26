@@ -556,7 +556,7 @@ def get_fixed(request):
             ),
     ],
 	responses={
-	    HTTP_200_OK: '\n\n> **환자 데일리 정보 반환 (반환 예 하단 참고)**\n\n```\n{\n\t"discharged": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0,\n\t"age": 28,\n\t"receives_push": 0,\n\t"daily": [\n\t\t{\n\t\t\t"p_daily_id": 6,\n\t\t\t"p_daily_time": "2021-09-15T07:55:47Z",\n\t\t\t"latitude": 0,\n\t\t\t"longitude": 0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 37.5,\n\t\t\t"prediction_result": 44,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t},\n\t\t...\n\t]\n}\n\n```',
+	    HTTP_200_OK: '\n\n> **환자 데일리 정보 반환 (반환 예 하단 참고)**\n\n```\n{\n\t"discharged": 0,\n\t"p_id": 19,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0,\n\t"age": 28,\n\t"receives_push": 0,\n\t"daily": [\n\t\t{\n\t\t\t"p_daily_id": 6,\n\t\t\t"p_daily_time": "2021-09-15T07:55:47Z",\n\t\t\t"latitude": 0,\n\t\t\t"longitude": 0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 37.5,\n\t\t\t"prediction_result": 44,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t},\n\t\t...\n\t]\n}\n\n```',
         HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_PID_MISSING.as_md() +
             error_collection.RAISE_400_RELATION_NONEXISTENT.as_md(),
@@ -610,7 +610,8 @@ def physician_patient(request):
 	operation_description='Get patients and physician update notice list.',
 	method='get',
 	responses={
-	    HTTP_200_OK: 'Success',
+	    HTTP_200_OK: '\n\n> **환자 업데이트 정보 반환 (반환 예 하단 참고)**\n\n```\n{\n\t[\n\t\t"p_id": 19,\n\t\t"name": "docl",\n\t\t"type": 1,\n\t\t"seen": 0,\n\t\t"time": "2021-01-01 13:49:41",\n\t\t"oxygen_delta": 0.5129,\n\t\t"icu_delta": 0.49123,\n\t],\n\t...\n}\n\n```',
+
 	},
 )
 @api_view(['GET'])
@@ -626,7 +627,7 @@ def get_updates(request):
     for row in update_lst:
         update_dic = {}
         update_dic['p_id'] = DPRelation.objects.get(relation_id=row['relation_id']).p
-        update_dic['name'] = PInfo.objects.get(p=update_dic['patient_no']).name
+        update_dic['name'] = PInfo.objects.get(p=update_dic['p_id']).name
         update_dic['type'] = row['type']
         update_dic['seen'] = row['seen']
         update_dic['time'] = row['recorded_time']
@@ -776,7 +777,7 @@ def physician_discharge(request):
             pass
 
         d_update.type = 2
-
+    d_update.recorded_time = datetime.datetime.now()
     d_update.seen = 0
     d_update.save()
     dp_relation.save()
