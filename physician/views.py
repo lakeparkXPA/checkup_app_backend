@@ -599,6 +599,7 @@ def physician_patient(request):
             row['prediction_result'] = round(row['prediction_result'], 2)
 
         general['daily'] = daily_lst
+        general['p_id'] = p_id
 
         return Response(general, status=HTTP_200_OK)
     else:
