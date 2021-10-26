@@ -625,7 +625,7 @@ def get_updates(request):
 
     for row in update_lst:
         update_dic = {}
-        update_dic['patient_no'] = DPRelation.objects.get(relation_id=row['relation_id']).p
+        update_dic['p_id'] = DPRelation.objects.get(relation_id=row['relation_id']).p
         update_dic['name'] = PInfo.objects.get(p=update_dic['patient_no']).name
         update_dic['type'] = row['type']
         update_dic['seen'] = row['seen']
