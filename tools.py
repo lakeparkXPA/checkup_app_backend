@@ -9,11 +9,11 @@ import json
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, EMAIL_REFRESH_TOKEN, CLIENT_SECRET, CLIENT_ID, FIREBASE_KEY
 
 
-def make_token(token_id, auth='patient'):
+def make_token(token_id, auth='patient', hours=1):
     payload = {}
     payload['auth'] = auth
     payload['id'] = token_id
-    payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(hours=300)
+    payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(minutes=hours)
 
     return jwt.encode(payload, SECRET_KEY, ALGORITHM)
 

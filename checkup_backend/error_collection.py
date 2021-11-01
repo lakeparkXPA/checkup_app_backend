@@ -102,14 +102,24 @@ RAISE_400_PATIENT_PUSH_TOKEN_NULL = ErrorCollection(
 )
 
 
-RAISE_403_NO_TOKEN = ErrorCollection(
+RAISE_401_NO_TOKEN = ErrorCollection(
     code='no_token',
-    status=status.HTTP_403_FORBIDDEN,
+    status=status.HTTP_401_UNAUTHORIZED,
     message='해당 토큰이 존재하지 않습니다.'
 )
-RAISE_403_TOKEN_EXPIRE = ErrorCollection(
-    code='token_expire',
-    status=status.HTTP_403_FORBIDDEN,
-    message='해당 토큰이 만료되었습니다.'
+RAISE_401_NO_REFRESH_TOKEN = ErrorCollection(
+    code='no_token',
+    status=status.HTTP_401_UNAUTHORIZED,
+    message='해당 새로고침 토큰이 존재하지 않습니다.'
+)
+RAISE_401_REFRESH_TOKEN_EXPIRE = ErrorCollection(
+    code='refresh_token_expire',
+    status=status.HTTP_401_UNAUTHORIZED,
+    message='해당 새로고침 토큰이 만료되었습니다.'
+)
+RAISE_401_WRONG_REFRESH_TOKEN = ErrorCollection(
+    code='wrong_refresh_token',
+    status=status.HTTP_401_UNAUTHORIZED,
+    message='해당 새로고침 토큰이 잘못되었습니다.'
 )
 

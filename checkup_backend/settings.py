@@ -173,10 +173,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
-         'DRF Token': {
+         'Token': {
                'type': 'apiKey',
                'name': 'TOKEN',
                'in': 'header'
-         }
+         },
+        'Refresh Token': {
+            'type': 'apiKey',
+            'name': 'REFRESH-TOKEN',
+            'in': 'header'
+        }
     }
 }

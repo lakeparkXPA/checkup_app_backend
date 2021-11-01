@@ -4,7 +4,7 @@ from django.core.validators import validate_email
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -56,9 +56,7 @@ import json
 		required=['email', 'password'],
 	),
 	responses={
-		HTTP_201_CREATED: openapi.Schema(
-				type=openapi.TYPE_STRING,
-				decription='auth-token'),
+		HTTP_201_CREATED: '\n\n> **회원가입, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
 		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
                               error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
                               error_collection.RAISE_400_EMAIL_EXIST.as_md() +
@@ -104,6 +102,9 @@ def physician_register(request):
             d_serial.save()
             login_obj = DLogin.objects.filter(email=email)
             token = PhysicianLogin(login_obj, many=True).data[0]
+            d_user = DLogin.objects.get(email=email)
+            d_user.refresh_token = token['refresh_token'].decode()
+            d_user.save()
             return Response(token, status=HTTP_201_CREATED)
         else:
             return Response(d_serial.errors, status=HTTP_400_BAD_REQUEST)
@@ -176,7 +177,7 @@ def physician_email_check(request):
 		required=['email', 'password'],
 	),
 	responses={
-        HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+        HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
         HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
                               error_collection.RAISE_400_WRONG_PASSWORD.as_md() +
                               error_collection.RAISE_400_WRONG_EMAIL.as_md(),
@@ -205,12 +206,16 @@ def physician_login(request):
                         if push_token:
                             d_user = DLogin.objects.get(email=email)
                             d_user.push_token = push_token
+                            d_user.alert = 0
                             d_user.save()
                     except:
                         pass
 
                     token = PhysicianLogin(login_obj, many=True).data[0]
 
+                    d_user = DLogin.objects.get(email=email)
+                    d_user.refresh_token = token['refresh_token'].decode()
+                    d_user.save()
                     return Response(token, status=HTTP_200_OK)
 
             except DLogin.DoesNotExist:
@@ -292,28 +297,37 @@ def physician_edit(request):
 	method='post',
     responses={
         HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
-        HTTP_403_FORBIDDEN:
-            error_collection.RAISE_403_NO_TOKEN.as_md() +
-            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
+        HTTP_401_UNAUTHORIZED:
+            error_collection.RAISE_401_NO_REFRESH_TOKEN.as_md() +
+            error_collection.RAISE_401_NO_TOKEN.as_md() +
+            error_collection.RAISE_401_WRONG_REFRESH_TOKEN.as_md() +
+            error_collection.RAISE_401_REFRESH_TOKEN_EXPIRE.as_md(),
     },
 )
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def token_refresh(request):
     token = request.META.get('HTTP_TOKEN')
+    refresh_token = request.META.get('HTTP_REFRESH_TOKEN')
+
+    if not refresh_token:
+        return Response({'message': 'no_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
 
     if not token:
-        return Response({'message': 'no_token'}, status=HTTP_403_FORBIDDEN)
+        return Response({'message': 'no_token'}, status=HTTP_401_UNAUTHORIZED)
 
     try:
-        decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
-        p_id = decoded_token['id']
-
-        token = make_token(p_id, auth='physician')
-
-        return Response({'token': token}, status=HTTP_200_OK)
+        client_decoded = jwt.decode(refresh_token, SECRET_KEY, ALGORITHM)
+        p_id = client_decoded['id']
+        db_refresh_token = PLogin.objects.get(p_id=p_id).refresh_token
+        db_decoded = jwt.decode(db_refresh_token, SECRET_KEY, ALGORITHM)
+        if db_decoded['auth'] and client_decoded['auth'] == 'refresh' and client_decoded == db_decoded:
+            token = make_token(p_id)
+            return Response({'token': token}, status=HTTP_201_CREATED)
+        else:
+            return Response({'message': 'wrong_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
     except:
-        return Response({'message': 'token_expire'}, status=HTTP_403_FORBIDDEN)
+        return Response({'message': 'refresh_token_expire'}, status=HTTP_401_UNAUTHORIZED)
 
 
 
@@ -412,9 +426,8 @@ def add_patient(request):
 	method='get',
 	responses={
 		HTTP_200_OK: '\n\n> **환자 목록 및 기본 정보 반환 (반환 예 하단 참고)**\n\n```\n[\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28\n\t},\n\t{\n\t\t"p_id": 19,\n\t\t"news": 0,\n\t\t"oxygen_change": 0,\n\t\t"icu_change": 0,\n\t\t"oxygen": 0.44002,\n\t\t"icu": 0.494376,\n\t\t"name": null,\n\t\t"age": 28,\n\t\t"sex":0,\n\t\t"discharged":1,\n\t\t"dyspnea":0\n\t},\n...]\n\n```',
-		HTTP_403_FORBIDDEN:
-            error_collection.RAISE_403_NO_TOKEN.as_md() +
-            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
+		HTTP_401_UNAUTHORIZED:
+            error_collection.RAISE_401_NO_TOKEN.as_md(),
 	},
 )
 @api_view(['GET'])
@@ -510,7 +523,7 @@ def get_main(request):
     ],
 	responses={
 	    HTTP_200_OK: '\n\n> **환자 고정 정보 반환 (반환 예 하단 참고)**\n\n```\n{\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182,\n\t"weight": 102,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0,\n\t"age": 28\n}\n\n```',
-		HTTP_403_FORBIDDEN:
+		HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_RELATION_NONEXISTENT.as_md() +
             error_collection.RAISE_400_PID_NONEXISTENT.as_md(),
 	},
@@ -611,7 +624,6 @@ def physician_patient(request):
 	method='get',
 	responses={
 	    HTTP_200_OK: '\n\n> **환자 업데이트 정보 반환 (반환 예 하단 참고)**\n\n```\n{\n\t[\n\t\t"p_id": 19,\n\t\t"name": "docl",\n\t\t"type": 1,\n\t\t"seen": 0,\n\t\t"time": "2021-01-01 13:49:41",\n\t\t"oxygen_delta": 0.5129,\n\t\t"icu_delta": 0.49123,\n\t],\n\t...\n}\n\n```',
-
 	},
 )
 @api_view(['GET'])
@@ -626,7 +638,7 @@ def get_updates(request):
 
     for row in update_lst:
         update_dic = {}
-        update_dic['p_id'] = DPRelation.objects.get(relation_id=row['relation_id']).p
+        update_dic['p_id'] = DPRelation.objects.get(relation_id=row['relation_id']).p.p_id
         update_dic['name'] = PInfo.objects.get(p=update_dic['p_id']).name
         update_dic['type'] = row['type']
         update_dic['seen'] = row['seen']
@@ -761,7 +773,7 @@ def physician_discharge(request):
     if int(reverse) > 0:
         dp_relation.discharged = 0
 
-        d_update.type = 1
+        d_update.type = 0
 
     else:
         dp_relation.discharged = 1

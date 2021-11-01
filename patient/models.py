@@ -25,6 +25,7 @@ class PLogin(models.Model):
     password = models.CharField(max_length=100, blank=True, null=True)
     agreed = models.IntegerField(blank=True, null=True)
     push_token = models.CharField(max_length=255, blank=True, null=True)
+    refresh_token = models.CharField(max_length=255,blank=True, null=True)
     locale = models.CharField(max_length=3, blank=True, null=True)
 
     class Meta:
@@ -64,6 +65,7 @@ class DLogin(models.Model):
     region = models.CharField(max_length=100, blank=True, null=True)
     hospital = models.CharField(max_length=100, blank=True, null=True)
     push_token = models.CharField(max_length=255, blank=True, null=True)
+    refresh_token = models.CharField(max_length=255, blank=True, null=True)
     alert = models.IntegerField(blank=True, null=True)
 
     class Meta:

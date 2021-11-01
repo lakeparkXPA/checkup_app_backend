@@ -6,7 +6,7 @@ from rest_framework import permissions, authentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, \
-    HTTP_405_METHOD_NOT_ALLOWED, HTTP_205_RESET_CONTENT, HTTP_202_ACCEPTED, HTTP_403_FORBIDDEN
+    HTTP_405_METHOD_NOT_ALLOWED, HTTP_205_RESET_CONTENT, HTTP_202_ACCEPTED, HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -57,9 +57,7 @@ import copy
 		required=['email', 'password1', 'password2'],
 	),
 	responses={
-		HTTP_201_CREATED: openapi.Schema(
-				type=openapi.TYPE_STRING,
-				decription='auth-token'),
+		HTTP_201_CREATED: '\n\n> **회원가입, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
 		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
         error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
         error_collection.RAISE_400_EMAIL_EXIST.as_md() +
@@ -110,6 +108,9 @@ def patient_register(request):
         p_detail.save()
         login_obj = PLogin.objects.filter(email=email)
         token = PatientLogin(login_obj, many=True).data[0]
+
+        p_user.refresh_token = token['refresh_token'].decode()
+        p_user.save()
 
         return Response(token, status=HTTP_201_CREATED)
     except Exception as e:
@@ -182,7 +183,7 @@ def patient_email_check(request):
 		required=['email', 'password'],
 	),
 	responses={
-		HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+		HTTP_200_OK: '\n\n> **로그인, 토큰 반환**\n\n```\n{\n\n\t"basic_info":True\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
 		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
         error_collection.RAISE_400_WRONG_PASSWORD.as_md() +
         error_collection.RAISE_400_WRONG_EMAIL.as_md(),
@@ -227,6 +228,10 @@ def patient_login(request):
                         basic_info = False
                     token['basic_info'] = basic_info
 
+                    p_user = PLogin.objects.get(email=email)
+                    p_user.refresh_token = token['refresh_token'].decode()
+                    p_user.save()
+
                     return Response(token, status=HTTP_202_ACCEPTED)
 
             except PLogin.DoesNotExist:
@@ -241,27 +246,36 @@ def patient_login(request):
 	responses={
 		HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
 		HTTP_403_FORBIDDEN:
-            error_collection.RAISE_403_NO_TOKEN.as_md() +
-            error_collection.RAISE_403_TOKEN_EXPIRE.as_md(),
+            error_collection.RAISE_401_NO_REFRESH_TOKEN.as_md() +
+            error_collection.RAISE_401_NO_TOKEN.as_md() +
+            error_collection.RAISE_401_WRONG_REFRESH_TOKEN.as_md() +
+            error_collection.RAISE_401_REFRESH_TOKEN_EXPIRE.as_md(),
 	},
 )
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def token_refresh(request):
     token = request.META.get('HTTP_TOKEN')
+    refresh_token = request.META.get('HTTP_REFRESH_TOKEN')
+
+    if not refresh_token:
+        return Response({'message': 'no_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
 
     if not token:
-        return Response({'message': 'no_token'}, status=HTTP_403_FORBIDDEN)
+        return Response({'message': 'no_token'}, status=HTTP_401_UNAUTHORIZED)
 
     try:
-        decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
-        p_id = decoded_token['id']
-
-        token = make_token(p_id)
-
-        return Response({'token': token}, status=HTTP_201_CREATED)
+        client_decoded = jwt.decode(refresh_token, SECRET_KEY, ALGORITHM)
+        p_id = client_decoded['id']
+        db_refresh_token = PLogin.objects.get(p_id=p_id).refresh_token
+        db_decoded = jwt.decode(db_refresh_token, SECRET_KEY, ALGORITHM)
+        if db_decoded['auth'] and client_decoded['auth'] == 'refresh' and client_decoded == db_decoded:
+            token = make_token(p_id)
+            return Response({'token': token}, status=HTTP_201_CREATED)
+        else:
+            return Response({'message': 'wrong_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
     except:
-        return Response({'message': 'token_expire'}, status=HTTP_403_FORBIDDEN)
+        return Response({'message': 'refresh_token_expire'}, status=HTTP_401_UNAUTHORIZED)
 
 
 @swagger_auto_schema(
@@ -954,16 +968,18 @@ class Daily(APIView):
 
             for row in doc_lst:
                 update_json = json.dumps(update_data)
-                d_update = DUpdate(relation=row['relation_id'])
+                dp_relation = DPRelation.objects.get(relation_id=row['relation_id'])
+                d_update = DUpdate(relation=dp_relation)
                 d_update.type = 1
                 d_update.data = update_json
                 d_update.seen = 0
                 d_update.recorded_time = datetime.datetime.now()
                 d_update.save()
 
-                if row['d__push_token'] != "" and row['d__alert'] < 2:
-                    if (update_data['oxygen'] > 0 or update_data['icu']) or row['d__alert'] == 0:
-                        tokens.append(row['d__push_token'])
+                if not row['d__push_token'] and not row['d__alert']:
+                    if row['d__alert'] < 2:
+                        if (update_data['oxygen'] > 0 or update_data['icu']) or row['d__alert'] == 0:
+                            tokens.append(row['d__push_token'])
 
             if len(tokens) > 0:
                 pushbody = "O2 probability "

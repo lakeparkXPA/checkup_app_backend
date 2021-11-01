@@ -138,5 +138,5 @@ class PatientLogin(serializers.ModelSerializer):
         data = super().to_representation(instance)
 
         if instance.pk:
-            return {'token': make_token(instance.pk)}
+            return {'token': make_token(instance.pk), 'refresh_token': make_token(instance.pk, auth='refresh', hours=5)}
         return data
