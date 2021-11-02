@@ -100,6 +100,11 @@ RAISE_400_PATIENT_PUSH_TOKEN_NULL = ErrorCollection(
     status=status.HTTP_400_BAD_REQUEST,
     message='해당 모드가 존재하지 않습니다.'
 )
+RAISE_400_OXYGEN_RECORD_NONEXISTENT = ErrorCollection(
+    code='oxygen_record_nonexistent',
+    status=status.HTTP_400_BAD_REQUEST,
+    message='해당 산소투여 기록이 존재하지 않습니다.'
+)
 
 
 RAISE_401_NO_TOKEN = ErrorCollection(
@@ -108,7 +113,7 @@ RAISE_401_NO_TOKEN = ErrorCollection(
     message='해당 토큰이 존재하지 않습니다.'
 )
 RAISE_401_NO_REFRESH_TOKEN = ErrorCollection(
-    code='no_token',
+    code='no_refresh_token',
     status=status.HTTP_401_UNAUTHORIZED,
     message='해당 새로고침 토큰이 존재하지 않습니다.'
 )

@@ -296,7 +296,7 @@ def physician_edit(request):
 	operation_description='Refresh an auth-token.',
 	method='post',
     responses={
-        HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+        HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
         HTTP_401_UNAUTHORIZED:
             error_collection.RAISE_401_NO_REFRESH_TOKEN.as_md() +
             error_collection.RAISE_401_NO_TOKEN.as_md() +
@@ -318,12 +318,18 @@ def token_refresh(request):
 
     try:
         client_decoded = jwt.decode(refresh_token, SECRET_KEY, ALGORITHM)
-        p_id = client_decoded['id']
-        db_refresh_token = PLogin.objects.get(p_id=p_id).refresh_token
+        d_id = client_decoded['id']
+        d_user = PLogin.objects.get(d_id=d_id)
+        db_refresh_token = d_user.refresh_token
         db_decoded = jwt.decode(db_refresh_token, SECRET_KEY, ALGORITHM)
         if db_decoded['auth'] and client_decoded['auth'] == 'refresh' and client_decoded == db_decoded:
-            token = make_token(p_id)
-            return Response({'token': token}, status=HTTP_201_CREATED)
+            login_obj = DLogin.objects.filter(d_id=d_id)
+            token = PhysicianLogin(login_obj, many=True).data[0]
+
+            d_user.refresh_token = token['refresh_token'].decode()
+            d_user.save()
+
+            return Response(token, status=HTTP_201_CREATED)
         else:
             return Response({'message': 'wrong_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
     except:
@@ -797,3 +803,56 @@ def physician_discharge(request):
     return Response(status=HTTP_200_OK)
 
 
+
+@swagger_auto_schema(
+	operation_description='Set patient oxygen.',
+	method='post',
+    request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'pid': openapi.Schema(
+					type=openapi.TYPE_NUMBER,
+					description='patient id'),
+            'start': openapi.Schema(
+					type=openapi.TYPE_BOOLEAN,
+					description='Start or ended'),
+    	},
+		required=['pid', 'start'],
+	),
+	responses={
+		HTTP_200_OK: 'Success',
+		HTTP_400_BAD_REQUEST:
+            error_collection.RAISE_400_PID_MISSING.as_md() +
+            error_collection.RAISE_400_RELATION_NONEXISTENT.as_md() +
+            error_collection.RAISE_400_OXYGEN_RECORD_NONEXISTENT.as_md(),
+	},
+)
+@api_view(['POST'])
+@permission_classes((PhysicianAuthenticated,))
+def set_oxygen(request):
+    d_id = get_id(request)
+    p_id = request.data['pid']
+    start = request.data['start']
+
+    if not p_id:
+        return Response({"code": "p_id_missing"}, status=HTTP_400_BAD_REQUEST)
+
+    dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
+
+    if not dp_relation:
+        return Response({"code": "relation_nonexistent"}, status=HTTP_400_BAD_REQUEST)
+
+
+    if start:
+        d_oxygen = DOxygen(relation=dp_relation)
+        d_oxygen.oxygen_start = datetime.datetime.now()
+    else:
+        try:
+            d_oxygen = DOxygen.objects.get(relation=dp_relation.relation_id, oxygen_end__isnull=True)
+            d_oxygen.oxygen_end = datetime.datetime.now()
+        except:
+            return Response({"code": "oxygen_record_nonexistent"}, status=HTTP_400_BAD_REQUEST)
+
+    d_oxygen.save()
+
+    return Response(status=HTTP_200_OK)

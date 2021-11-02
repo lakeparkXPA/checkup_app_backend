@@ -244,8 +244,8 @@ def patient_login(request):
 	operation_description='Refresh an auth-token.',
 	method='post',
 	responses={
-		HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
-		HTTP_403_FORBIDDEN:
+		HTTP_200_OK: '\n\n> **신규 토큰 반환**\n\n```\n{\n\n\t"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0",\n\t"refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdXRoIjoicGF0aWVudCIsImlkIjoxOSwiZXhwIjoxNjMzOTY4MTYxfQ.UqAuOEklo8cxTgJtd8nPJSlFgmcZB5Dvd27YGemrgb0"\n\n}\n\n```',
+		HTTP_401_UNAUTHORIZED:
             error_collection.RAISE_401_NO_REFRESH_TOKEN.as_md() +
             error_collection.RAISE_401_NO_TOKEN.as_md() +
             error_collection.RAISE_401_WRONG_REFRESH_TOKEN.as_md() +
@@ -267,11 +267,17 @@ def token_refresh(request):
     try:
         client_decoded = jwt.decode(refresh_token, SECRET_KEY, ALGORITHM)
         p_id = client_decoded['id']
-        db_refresh_token = PLogin.objects.get(p_id=p_id).refresh_token
+        p_user = PLogin.objects.get(p_id=p_id)
+        db_refresh_token = p_user.refresh_token
         db_decoded = jwt.decode(db_refresh_token, SECRET_KEY, ALGORITHM)
         if db_decoded['auth'] and client_decoded['auth'] == 'refresh' and client_decoded == db_decoded:
-            token = make_token(p_id)
-            return Response({'token': token}, status=HTTP_201_CREATED)
+            login_obj = PLogin.objects.filter(p_id=p_id)
+            token = PatientLogin(login_obj, many=True).data[0]
+
+            p_user.refresh_token = token['refresh_token'].decode()
+            p_user.save()
+
+            return Response(token, status=HTTP_201_CREATED)
         else:
             return Response({'message': 'wrong_refresh_token'}, status=HTTP_401_UNAUTHORIZED)
     except:
@@ -555,7 +561,7 @@ class Fixed(APIView):
         operation_description='Get fixed data.',
         responses={
             HTTP_200_OK: '\n\n> **고정 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"p_fixed_id": 7,\n\t"smoking": 1,\n\t"height": 182.0,\n\t"weight": 102.0,\n\t"adl": 0,\n\t"p_id": 19,\n\t"chronic_cardiac_disease": 1,\n\t"chronic_neurologic_disorder": 1,\n\t"copd": 1,\n\t"asthma": 1,\n\t"chronic_liver_disease": 1,\n\t"hiv": 1,\n\t"autoimmune_disease": 1,\n\t"dm": 0,\n\t"hypertension": 0,\n\t"ckd": 0,\n\t"cancer": 0,\n\t"heart_failure": 0,\n\t"dementia": 0,\n\t"chronic_hematologic_disorder": 0,\n\t"transplantation": 1,\n\t"immunosuppress_agent": 1,\n\t"chemotherapy": 0,\n\t"pregnancy": 0,\n\t"name": null,\n\t"birth": "1992-12-25",\n\t"sex": 0,\n\t"email": "test@docl.org"\n\n}\n\n```',
-            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
+            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
     def get(self, request, format=None):
@@ -635,7 +641,7 @@ class Fixed(APIView):
         ),
         responses={
             HTTP_201_CREATED: 'Fixed loaded',
-            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
+            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
     def post(self, request, format=None):
@@ -738,7 +744,7 @@ class Daily(APIView):
         responses={
             HTTP_200_OK: '\n\n> **일별 변수 반환 (반환 예 하단 참고)**\n\n```\n{\n\n\t"hasnext": 2,\n\t"items": [\n\t\t{\n\t\t\t"p_daily_id": 5,\n\t\t\t"p_daily_time": "2021-09-15T07:55:39Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 36.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t},\n\t\t{\n\t\t\t"p_daily_id": 6,\n\t\t\t"p_daily_time": "2021-09-15T07:55:47Z",\n\t\t\t"latitude": 0.0,\n\t\t\t"longitude": 0.0,\n\t\t\t"p_id": 19,\n\t\t\t"hemoptysis": 0,\n\t\t\t"dyspnea": 0,\n\t\t\t"chest_pain": 0,\n\t\t\t"cough": 0,\n\t\t\t"sputum": 0,\n\t\t\t"rhinorrhea": 0,\n\t\t\t"sore_throat": 0,\n\t\t\t"anosmia": 0,\n\t\t\t"myalgia": 0,\n\t\t\t"arthralgia": 0,\n\t\t\t"fatigue": 0,\n\t\t\t"headache": 0,\n\t\t\t"diarrhea": 0,\n\t\t\t"nausea_vomiting": 0,\n\t\t\t"chill": 0,\n\t\t\t"antipyretics": 1,\n\t\t\t"temp_capable": 1,\n\t\t\t"temp": 37.5,\n\t\t\t"prediction_result": 44.002,\n\t\t\t"prediction_explaination": "{\"ml_class\": 1, \"ml_probability\": 0.440020352602005, \"stat_class\": 1, \"stat_probability\": 1.3409791840000034, \"status\": \"ok\", \"icu\": 0.4943764805793762}",\n\t\t\t"oxygen": 0.44002,\n\t\t\t"icu": 0.494376\n\t\t}\n\t]\n\n}\n\n```',
 
-            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
+            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
     def get(self, request, format=None):
@@ -853,7 +859,7 @@ class Daily(APIView):
         ),
         responses={
             HTTP_201_CREATED: 'ok',
-            HTTP_403_FORBIDDEN: 'Bad request. No Token.',
+            HTTP_401_UNAUTHORIZED: 'Bad request. No Token.',
         },
     )
     def post(self, request, format=None):
