@@ -34,7 +34,7 @@ CLIENT_ID = key['CLIENT_ID']
 CLIENT_SECRET = key['CLIENT_SECRET']
 DEBUG = key['DEBUG']
 ALLOWED_HOSTS = key['ALLOWED_HOSTS']
-
+PATIENT_CODE = key['PATIENT_CODE']
 
 # Application definition
 

@@ -11,7 +11,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 
-from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
+from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY, PATIENT_CODE
 from checkup_backend.permissions import PatientAuthenticated
 
 from patient.serializers import *
@@ -1075,7 +1075,7 @@ def get_physicians(request):
     phy_lst = []
     for row in phy:
         row_dic = row
-        row_dic['code'] = row_dic['p_id'] + 1001
+        row_dic['code'] = row_dic['p_id'] + PATIENT_CODE
         phy_lst.append(row_dic)
 
     return Response(phy_lst, status=HTTP_200_OK)
@@ -1093,7 +1093,6 @@ def get_physicians(request):
 @permission_classes((PatientAuthenticated,))
 def generate_code(request):
     p_id = get_id(request)
-    # TODO ---- change to setting code generation number
-    return Response({'code': p_id + 1001}, status=HTTP_201_CREATED)
+    return Response({'code': p_id + PATIENT_CODE}, status=HTTP_201_CREATED)
 
 

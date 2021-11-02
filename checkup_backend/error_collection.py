@@ -12,7 +12,7 @@ class ErrorCollection(object):
     def as_md(self):
         return '\n\n> **%s**\n\n```\n{\n\n\t"code": "%s"\n\n}\n\n```' % \
                (self.message, self.code) # \n\n\t"message": "%s"     self.message
-    #TODO ---- add message to return
+
 
 
 RAISE_400_EMAIL_MISSING = ErrorCollection(

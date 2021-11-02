@@ -9,7 +9,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 
-from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY
+from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY, PATIENT_CODE
 from checkup_backend.permissions import PhysicianAuthenticated
 from checkup_backend import error_collection
 
@@ -363,9 +363,8 @@ def add_patient(request):
     d_id = get_id(request)
     code = request.data['code']
     try:
-        # TODO ---- change to setting code generation number
-        if code > 1001:
-            p_id = code - 1001
+        if code > PATIENT_CODE:
+            p_id = code - PATIENT_CODE
         else:
             raise ValueError('wrong_code')
 
