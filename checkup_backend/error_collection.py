@@ -100,6 +100,11 @@ RAISE_400_PATIENT_PUSH_TOKEN_NULL = ErrorCollection(
     status=status.HTTP_400_BAD_REQUEST,
     message='해당 모드가 존재하지 않습니다.'
 )
+RAISE_400_OXYGEN_NOT_ENDED = ErrorCollection(
+    code='oxygen_not_ended',
+    status=status.HTTP_400_BAD_REQUEST,
+    message='산소투여 기록이 끝나지 않습니다.'
+)
 RAISE_400_OXYGEN_RECORD_NONEXISTENT = ErrorCollection(
     code='oxygen_record_nonexistent',
     status=status.HTTP_400_BAD_REQUEST,

@@ -4,7 +4,7 @@ from django.core.validators import validate_email
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK, HTTP_201_CREATED, HTTP_205_RESET_CONTENT, HTTP_401_UNAUTHORIZED
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -17,12 +17,13 @@ from physician.serializers import *
 from patient.models import DLogin, DPRelation, DUpdate, PDailyPredict
 from patient.serializers import FixedGet, DailyGet
 
-from tools import make_token, get_id
+from tools import make_token, get_id, sendmail
 
 import jwt
 import datetime
 import requests
 import json
+import random
 
 
 @swagger_auto_schema(
@@ -126,7 +127,7 @@ def physician_register(request):
 		required=['email'],
 	),
 	responses={
-		HTTP_200_OK: 'registrable: True/False',
+		HTTP_200_OK: '\n\n> **이메일 체크, 가입시 이름 반환**\n\n```\n{\n\n\t"registrable": false,\n\t"name": "docl"\n\n}\n\n```',
         HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_EMAIL_MISSING.as_md() +
             error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
@@ -147,7 +148,7 @@ def physician_email_check(request):
             raise ValueError('email_format')
         try:
             id_cnt = DLogin.objects.get(email=email)
-            res = Response({"registrable": False}, status=HTTP_200_OK)
+            res = Response({"registrable": False, "name": id_cnt.name}, status=HTTP_200_OK)
             return res
         except DLogin.DoesNotExist:
             res = Response({"registrable": True}, status=HTTP_200_OK)
@@ -292,6 +293,187 @@ def physician_edit(request):
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+
+
+@swagger_auto_schema(
+	operation_description='Send email a code to find password. Code expires in 20 minutes.',
+	method='post',
+    request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'email': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description='Email'),
+            },
+            required=['email'],
+    ),
+	responses={
+		HTTP_201_CREATED: 'Email sent.',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_MISSING.as_md() +
+        error_collection.RAISE_400_EMAIL_NONEXISTENT.as_md()
+        ,
+	},
+)
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def physician_password_forget(request):
+    email = request.data['email']
+
+    try:
+        if not email:
+            raise ValueError('email_missing')
+        try:
+            d_email = DLogin.objects.get(email=email).email
+        except PLogin.DoesNotExist:
+            raise ValueError('email_nonexistent')
+
+        code = random.randint(1000, 10000)
+
+        sendmail(
+            to=d_email,
+            subject='CheckUP Password Reset Confirmation Code.',
+            message_text_html='CheckUp DOCL Password Reset<br>' +
+                              'Your code to reset the password of CheckUp DOCL is <br><br><h2>' + str(code) +
+                              '</h2><br><br> Please enter the site linked below and enter the code.<br>' +
+                              'https://testapi.docl.org <br><br>Thank you,<br>Sincerely DOCL.'
+        )
+        d_id = DLogin.objects.get(email=email).d_id
+
+        try:
+            old_pass = DPass.objects.get(d=d_id)
+            old_pass.delete()
+        except DPass.DoesNotExist:
+            password = DPass(d=d_id)
+            password.code = code
+            password.d_pass_time = datetime.datetime.now()
+            password.save()
+
+        return Response(status=HTTP_201_CREATED)
+
+    except Exception as e:
+        res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return res
+
+
+@swagger_auto_schema(
+	operation_description='Check email given password reset code. Code expires in 20 minutes.',
+	method='get',
+    manual_parameters=[
+        openapi.Parameter(
+            'email',
+            openapi.IN_QUERY,
+            type=openapi.TYPE_STRING,
+            description='Email'
+        ),
+        openapi.Parameter(
+            'code',
+            openapi.IN_QUERY,
+            type=openapi.TYPE_NUMBER,
+            description='Code'
+        ),
+    ],
+	responses={
+		HTTP_200_OK: 'registrable: True/False',
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_CODE_MISSING.as_md() +
+        error_collection.RAISE_400_WRONG_CODE.as_md() +
+        error_collection.RAISE_400_TIME_EXPIRE.as_md() +
+        error_collection.RAISE_400_CODE_NONEXISTENT.as_md(),
+	},
+)
+@api_view(['GET'])
+@permission_classes((permissions.AllowAny,))
+def physician_password_code(request):
+    email = request.data['email']
+    code = request.data['code']
+
+    try:
+        if not code:
+            raise ValueError('code_missing')
+
+        try:
+            d_id = DLogin.objects.get(email=email).d_id
+        except PLogin.DoesNotExist:
+            raise ValueError('email_nonexistent')
+
+        try:
+            password = DPass.objects.get(d=d_id)
+            old_code = password.code
+
+            if old_code != code:
+                raise ValueError('wrong_code')
+            code_time = password.d_pass_time
+            time_passed = datetime.datetime.utcnow() - code_time
+
+            if time_passed > datetime.timedelta(minutes=20):
+                raise ValueError('time_expire')
+            password.delete()
+            return Response({"registrable": True}, status=HTTP_200_OK)
+
+        except PPass.DoesNotExist:
+            raise ValueError('code_nonexistent')
+
+    except Exception as e:
+        res = Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
+        return res
+
+
+@swagger_auto_schema(
+	operation_description='Reset password.',
+	method='post',
+	request_body=openapi.Schema(
+    	type=openapi.TYPE_OBJECT,
+    	properties={
+        	'email': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Email'),
+        	'password1': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password1'),
+            'password2': openapi.Schema(
+					type=openapi.TYPE_STRING,
+					description='Password2'),
+    	},
+		required=['email', 'password1', 'password2'],
+	),
+	responses={
+		HTTP_201_CREATED: openapi.Schema(
+				type=openapi.TYPE_STRING,
+				decription='auth-token'),
+		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_EMAIL_FORMAT_INVALID.as_md() +
+        error_collection.RAISE_400_EMAIL_NONEXISTENT.as_md() +
+        error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
+	},
+)
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def physician_password_reset(request):
+    email = request.data['email']
+    password1 = request.data['password1']
+    password2 = request.data['password2']
+
+    try:
+        try:
+            validate_email(email)
+        except:
+            raise ValueError('email_format')
+
+        try:
+            d_user = DLogin.objects.get(email=email)
+
+        except DLogin.DoesNotExist:
+            raise ValueError('email_nonexistent')
+
+        if password2 != password1:
+            raise ValueError('password_not_same')
+
+        d_user.password = password1
+        d_user.save()
+
+        return Response(status=HTTP_205_RESET_CONTENT)
+    except Exception as e:
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
 @swagger_auto_schema(
 	operation_description='Refresh an auth-token.',
 	method='post',
@@ -370,21 +552,25 @@ def add_patient(request):
 
 
         dp_relation = DPRelation.objects.filter(p=p_id, d=d_id)
-        if dp_relation:
-            raise ValueError('relation_exists')
-
-
-
         p_obj = PLogin.objects.get(p_id=p_id)
         p_push = p_obj.push_token
         p_locale = p_obj.locale
 
-        d_p_relation = DPRelation()
-        d_p_relation.p = p_obj
-        d_p_relation.d = DLogin.objects.get(d_id=d_id)
-        d_p_relation.discharged = 0
-        d_p_relation.add_time = datetime.datetime.now()
-        d_p_relation.save()
+        if dp_relation:
+            dp_relation = DPRelation.objects.get(p=p_id, d=d_id)
+            if dp_relation.discharged == 1:
+                dp_relation.discharged = 0
+                dp_relation.save()
+            else:
+                raise ValueError('relation_exists')
+        else:
+
+            d_p_relation = DPRelation()
+            d_p_relation.p = p_obj
+            d_p_relation.d = DLogin.objects.get(d_id=d_id)
+            d_p_relation.discharged = 0
+            d_p_relation.add_time = datetime.datetime.now()
+            d_p_relation.save()
 
         d_name = DLogin.objects.get(d_id=d_id).name
 
@@ -419,7 +605,7 @@ def add_patient(request):
             }
             requests.post(url, data=json.dumps(contents), headers=headers)
 
-        return Response(status=HTTP_201_CREATED)
+            return Response(status=HTTP_201_CREATED)
 
     except Exception as e:
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
@@ -440,11 +626,19 @@ def add_patient(request):
 def get_main(request):
     d_id = get_id(request)
 
-    p_id_obj = DPRelation.objects.filter(Q(d=d_id) & Q(discharged=0)).values_list('p')
-    p_id_lst = [i[0] for i in p_id_obj]
+    relation_obj = DPRelation.objects.filter(d=d_id).values_list('relation_id', 'p')
 
+
+    # p_id_obj = DPRelation.objects.prefetch_related('p__p_id__p_daily').filter(
+    #     Q(d=15) & Q(discharged=0) & Q(p__pdaily__p_daily_id__isnull=False)).values_list('p')
+    #
+    # p_id_lst = [i[0] for i in p_id_obj]
+    # p_id_lst = list(set(p_id_lst))
     main_lst = []
-    for p_id in p_id_lst:
+    for relation_p in relation_obj:
+        relation_id = relation_p[0]
+        p_id = relation_p[1]
+
         main_dic = {"p_id": p_id}
         last_seen_cnt = DUpdate.objects.select_related('relation_id').filter(Q(relation__d=d_id) &
                                                                              Q(relation__p=p_id) &
@@ -498,17 +692,19 @@ def get_main(request):
         main_dic['age'] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
         main_dic['sex'] = p_info.sex
 
-        main_dic['discharged'] = 1 if DPRelation.objects.filter(p=p_id, discharged=1) else 0
-        main_dic['dyspnea'] = PDailySymptom.objects.select_related('p_daily__p').filter(p_daily__p=p_id).\
-            latest('p_daily').dyspnea
+        main_dic['discharged'] = 1 if DPRelation.objects.filter(relation_id=relation_id, discharged=1) else 0
+        try:
+            main_dic['dyspnea'] = PDailySymptom.objects.select_related('p_daily__p').filter(p_daily__p=p_id).\
+                latest('p_daily').dyspnea
+        except:
+            main_dic['dyspnea'] = 0
 
-
-        # oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
-        #                                                                Q(oxygen_end__isnull=True))
-        # if oxygen_obj:
-        #     main_dic['oxygen_supply'] = 1
-        # else:
-        #     main_dic['oxygen_supply'] = 0
+        oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
+                                                                       Q(oxygen_end__isnull=True))
+        if oxygen_obj:
+            main_dic['oxygen_supply'] = 1
+        else:
+            main_dic['oxygen_supply'] = 0
 
         main_lst.append(main_dic)
 
@@ -598,12 +794,12 @@ def physician_patient(request):
         DUpdate.objects.filter(relation_id=dp_relation.relation_id).update(seen=1)
 
 
-        # d_oxygen = DOxygen.objects.filter(relation_id=dp_relation.relation_id).values('oxygen_start')
-        # if d_oxygen:
-        #     general['oxygen_supply'] = 1
-        #     general['oxygen_start'] = d_oxygen[0]['oxygen_start']
-        # else:
-        #     general['oxygen_supply'] = 0
+        d_oxygen = DOxygen.objects.filter(relation_id=dp_relation.relation_id).values('oxygen_start')
+        if d_oxygen:
+            general['oxygen_supply'] = 1
+            general['oxygen_start'] = d_oxygen[0]['oxygen_start']
+        else:
+            general['oxygen_supply'] = 0
 
         p_push = PLogin.objects.get(p_id=p_id).push_token
         if p_push:
@@ -618,6 +814,13 @@ def physician_patient(request):
 
         general['daily'] = daily_lst
         general['p_id'] = p_id
+
+        oxygen_obj = DOxygen.objects.select_related('relation').filter(Q(relation__p=p_id) &
+                                                                       Q(oxygen_end__isnull=True))
+        if oxygen_obj:
+            general['oxygen_supply'] = 1
+        else:
+            general['oxygen_supply'] = 0
 
         return Response(general, status=HTTP_200_OK)
     else:
@@ -739,9 +942,6 @@ def send_alert(request):
         	'pid': openapi.Schema(
 					type=openapi.TYPE_NUMBER,
 					description='patient id'),
-            'reverse': openapi.Schema(
-					type=openapi.TYPE_NUMBER,
-					description='reverse the discharge or not'),
             'worsened': openapi.Schema(
 					type=openapi.TYPE_BOOLEAN,
 					description='Worsened or not'),
@@ -749,7 +949,7 @@ def send_alert(request):
 					type=openapi.TYPE_STRING,
 					description='Cause of discharge'),
     	},
-		required=['pid', 'reverse'],
+		required=['pid'],
 	),
 	responses={
 		HTTP_200_OK: 'Success',
@@ -763,40 +963,34 @@ def send_alert(request):
 def physician_discharge(request):
     d_id = get_id(request)
     p_id = request.data['pid']
-    reverse = request.data['reverse']
-
     if not p_id:
         return Response({"code": "p_id_missing"}, status=HTTP_400_BAD_REQUEST)
 
     dp_relation = DPRelation.objects.get(d=d_id, p=p_id)
 
+
     if not dp_relation:
         return Response({"code": "relation_nonexistent"}, status=HTTP_400_BAD_REQUEST)
 
     d_update = DUpdate(relation=dp_relation)
+    dp_relation.discharged = 1
+    dp_relation.discharged_time = datetime.datetime.now()
+    try:
+        worsened = request.data['worsened']
+        dp_relation.worsened = int(worsened)
+    except:
+        pass
+    try:
+        cause = request.data['cause']
+        dp_relation.cause = cause
+    except:
+        pass
 
-    if int(reverse) > 0:
-        dp_relation.discharged = 0
-
-        d_update.type = 0
-
-    else:
-        dp_relation.discharged = 1
-        try:
-            worsened = request.data['worsened']
-            dp_relation.worsened = int(worsened)
-        except:
-            pass
-        try:
-            cause = request.data['cause']
-            dp_relation.cause = cause
-        except:
-            pass
-
-        d_update.type = 2
+    d_update.type = 2
     d_update.recorded_time = datetime.datetime.now()
     d_update.seen = 0
     d_update.save()
+
     dp_relation.save()
 
     return Response(status=HTTP_200_OK)
@@ -823,6 +1017,7 @@ def physician_discharge(request):
 		HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_PID_MISSING.as_md() +
             error_collection.RAISE_400_RELATION_NONEXISTENT.as_md() +
+            error_collection.RAISE_400_OXYGEN_NOT_ENDED.as_md() +
             error_collection.RAISE_400_OXYGEN_RECORD_NONEXISTENT.as_md(),
 	},
 )
@@ -841,17 +1036,22 @@ def set_oxygen(request):
     if not dp_relation:
         return Response({"code": "relation_nonexistent"}, status=HTTP_400_BAD_REQUEST)
 
-
     if start:
+        try:
+            d_oxygen = DOxygen.objects.get(relation=dp_relation.relation_id, oxygen_end__isnull=True)
+            return Response({"code": "oxygen_not_ended"}, status=HTTP_400_BAD_REQUEST)
+        except:
+            pass
         d_oxygen = DOxygen(relation=dp_relation)
-        d_oxygen.oxygen_start = datetime.datetime.now()
+        d_oxygen.oxygen_start = datetime.datetime.utcnow()
     else:
         try:
             d_oxygen = DOxygen.objects.get(relation=dp_relation.relation_id, oxygen_end__isnull=True)
-            d_oxygen.oxygen_end = datetime.datetime.now()
+            d_oxygen.oxygen_end = datetime.datetime.utcnow()
         except:
             return Response({"code": "oxygen_record_nonexistent"}, status=HTTP_400_BAD_REQUEST)
 
     d_oxygen.save()
 
     return Response(status=HTTP_200_OK)
+

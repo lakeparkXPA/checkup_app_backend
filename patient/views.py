@@ -355,7 +355,7 @@ def patient_edit(request):
 
 
 @swagger_auto_schema(
-	operation_description='Send email a code to find password.',
+	operation_description='Send email a code to find password. Code expires in 20 minutes.',
 	method='post',
     request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -415,7 +415,7 @@ def patient_password_forget(request):
 
 
 @swagger_auto_schema(
-	operation_description='Check email given password reset code.',
+	operation_description='Check email given password reset code. Code expires in 20 minutes.',
 	method='get',
     manual_parameters=[
         openapi.Parameter(
@@ -517,7 +517,7 @@ def patient_password_reset(request):
             raise ValueError('email_format')
 
         try:
-            id_cnt = PLogin.objects.get(email=email)
+            p_user = PLogin.objects.get(email=email)
 
         except PLogin.DoesNotExist:
             raise ValueError('email_nonexistent')
@@ -525,10 +525,9 @@ def patient_password_reset(request):
         if password2 != password1:
             raise ValueError('password_not_same')
 
-        p_user = PLogin(email=email)
         p_user.password = password1
         p_user.save()
-        #token 추가
+
         return Response(status=HTTP_205_RESET_CONTENT)
     except Exception as e:
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
@@ -637,7 +636,7 @@ class Fixed(APIView):
                     pregnancy'
                 ),
             },
-            required=['birth', 'sex', 'smoking', 'height', 'weight', 'adl', 'condition','unique'],
+            required=['birth', 'sex', 'smoking', 'height', 'weight', 'adl', 'condition', 'unique'],
         ),
         responses={
             HTTP_201_CREATED: 'Fixed loaded',
