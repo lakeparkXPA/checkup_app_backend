@@ -337,13 +337,13 @@ def physician_password_forget(request):
                               '</h2><br><br> Please enter the site linked below and enter the code.<br>' +
                               'https://testapi.docl.org <br><br>Thank you,<br>Sincerely DOCL.'
         )
-        d_id = DLogin.objects.get(email=email).d_id
-
+        d_obj = DLogin.objects.get(email=email)
+        d_id = d_obj.d_id
         try:
             old_pass = DPass.objects.get(d=d_id)
             old_pass.delete()
         except DPass.DoesNotExist:
-            password = DPass(d=d_id)
+            password = DPass(d=d_obj)
             password.code = code
             password.d_pass_time = datetime.datetime.now()
             password.save()
@@ -383,8 +383,8 @@ def physician_password_forget(request):
 @api_view(['GET'])
 @permission_classes((permissions.AllowAny,))
 def physician_password_code(request):
-    email = request.data['email']
-    code = request.data['code']
+    email = request.GET.get('email')
+    code = int(request.GET.get('code'))
 
     try:
         if not code:
@@ -402,7 +402,7 @@ def physician_password_code(request):
             if old_code != code:
                 raise ValueError('wrong_code')
             code_time = password.d_pass_time
-            time_passed = datetime.datetime.utcnow() - code_time
+            time_passed = datetime.datetime.now(datetime.timezone.utc) - code_time
 
             if time_passed > datetime.timedelta(minutes=20):
                 raise ValueError('time_expire')
