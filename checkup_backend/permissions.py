@@ -23,6 +23,24 @@ class PatientAuthenticated(permissions.BasePermission):
                 return False
 
 
+class PatientResetAuthenticated(permissions.BasePermission):
+    def has_permission(self, request, view):
+        token = request.META.get('HTTP_TOKEN')
+        if token is None:
+            return False
+        else:
+            try:
+                decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
+            except:
+                raise exceptions.AuthenticationFailed('token_expire')
+
+            if decoded_token['auth'] == 'patient_reset':
+                return True
+            else:
+                return False
+
+
+
 class PhysicianAuthenticated(permissions.BasePermission):
     def has_permission(self, request, view):
         token = request.META.get('HTTP_TOKEN')
@@ -39,3 +57,19 @@ class PhysicianAuthenticated(permissions.BasePermission):
             else:
                 return False
 
+
+class PhysicianResetAuthenticated(permissions.BasePermission):
+    def has_permission(self, request, view):
+        token = request.META.get('HTTP_TOKEN')
+        if token is None:
+            return False
+        else:
+            try:
+                decoded_token = jwt.decode(token, SECRET_KEY, ALGORITHM)
+            except:
+                raise exceptions.AuthenticationFailed('token_expire')
+
+            if decoded_token['auth'] == 'physician_reset':
+                return True
+            else:
+                return False

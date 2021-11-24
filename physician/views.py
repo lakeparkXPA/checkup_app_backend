@@ -10,7 +10,7 @@ from drf_yasg import openapi
 
 
 from checkup_backend.settings import ALGORITHM, SECRET_KEY, FIREBASE_KEY, PATIENT_CODE
-from checkup_backend.permissions import PhysicianAuthenticated
+from checkup_backend.permissions import PhysicianAuthenticated, PhysicianResetAuthenticated
 from checkup_backend import error_collection
 
 from physician.serializers import *
@@ -316,7 +316,7 @@ def physician_edit(request):
 )
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
-def physician_password_forget(request):
+def physician_password_forgot(request):
     email = request.data['email']
 
     try:
@@ -331,11 +331,11 @@ def physician_password_forget(request):
 
         sendmail(
             to=d_email,
-            subject='CheckUP Password Reset Confirmation Code.',
-            message_text_html='CheckUp DOCL Password Reset<br>' +
-                              'Your code to reset the password of CheckUp DOCL is <br><br><h2>' + str(code) +
+            subject='DOCL Physician Password Reset Confirmation Code.',
+            message_text_html='DOCL Physician Password Reset<br>' +
+                              'Your code to reset the password of DOCL Physician is <br><br><h2>' + str(code) +
                               '</h2><br><br> Please enter the site linked below and enter the code.<br>' +
-                              'https://testapi.docl.org <br><br>Thank you,<br>Sincerely DOCL.'
+                              'https://physician.docl.org <br><br>Thank you,<br>Sincerely DOCL.'
         )
         d_obj = DLogin.objects.get(email=email)
         d_id = d_obj.d_id
@@ -343,10 +343,11 @@ def physician_password_forget(request):
             old_pass = DPass.objects.get(d=d_id)
             old_pass.delete()
         except DPass.DoesNotExist:
-            password = DPass(d=d_obj)
-            password.code = code
-            password.d_pass_time = datetime.datetime.now()
-            password.save()
+            pass
+        password = DPass(d=d_obj)
+        password.code = code
+        password.d_pass_time = datetime.datetime.now()
+        password.save()
 
         return Response(status=HTTP_201_CREATED)
 
@@ -373,7 +374,7 @@ def physician_password_forget(request):
         ),
     ],
 	responses={
-		HTTP_200_OK: 'registrable: True/False',
+		HTTP_200_OK: 'registrable: True/False, token : token',
 		HTTP_400_BAD_REQUEST: error_collection.RAISE_400_CODE_MISSING.as_md() +
         error_collection.RAISE_400_WRONG_CODE.as_md() +
         error_collection.RAISE_400_TIME_EXPIRE.as_md() +
@@ -407,7 +408,8 @@ def physician_password_code(request):
             if time_passed > datetime.timedelta(minutes=20):
                 raise ValueError('time_expire')
             password.delete()
-            return Response({"registrable": True}, status=HTTP_200_OK)
+            token = make_token(d_id, auth='physician_reset')
+            return Response({"registrable": True, "token": token}, status=HTTP_200_OK)
 
         except PPass.DoesNotExist:
             raise ValueError('code_nonexistent')
@@ -423,9 +425,6 @@ def physician_password_code(request):
 	request_body=openapi.Schema(
     	type=openapi.TYPE_OBJECT,
     	properties={
-        	'email': openapi.Schema(
-					type=openapi.TYPE_STRING,
-					description='Email'),
         	'password1': openapi.Schema(
 					type=openapi.TYPE_STRING,
 					description='Password1'),
@@ -433,7 +432,7 @@ def physician_password_code(request):
 					type=openapi.TYPE_STRING,
 					description='Password2'),
     	},
-		required=['email', 'password1', 'password2'],
+		required=['password1', 'password2'],
 	),
 	responses={
 		HTTP_201_CREATED: openapi.Schema(
@@ -445,20 +444,15 @@ def physician_password_code(request):
 	},
 )
 @api_view(['POST'])
-@permission_classes((permissions.AllowAny,))
+@permission_classes((PhysicianResetAuthenticated,))
 def physician_password_reset(request):
-    email = request.data['email']
+    d_id = get_id(request)
     password1 = request.data['password1']
     password2 = request.data['password2']
 
     try:
         try:
-            validate_email(email)
-        except:
-            raise ValueError('email_format')
-
-        try:
-            d_user = DLogin.objects.get(email=email)
+            d_user = DLogin.objects.get(d_id=d_id)
 
         except DLogin.DoesNotExist:
             raise ValueError('email_nonexistent')
@@ -552,9 +546,12 @@ def add_patient(request):
 
 
         dp_relation = DPRelation.objects.filter(p=p_id, d=d_id)
-        p_obj = PLogin.objects.get(p_id=p_id)
-        p_push = p_obj.push_token
-        p_locale = p_obj.locale
+        try:
+            p_obj = PLogin.objects.get(p_id=p_id)
+            p_push = p_obj.push_token
+            p_locale = p_obj.locale
+        except:
+            raise ValueError('wrong_code')
 
         if dp_relation:
             dp_relation = DPRelation.objects.get(p=p_id, d=d_id)
@@ -605,7 +602,7 @@ def add_patient(request):
             }
             requests.post(url, data=json.dumps(contents), headers=headers)
 
-            return Response(status=HTTP_201_CREATED)
+        return Response(status=HTTP_201_CREATED)
 
     except Exception as e:
         return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
