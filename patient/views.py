@@ -286,7 +286,7 @@ def token_refresh(request):
 
 @swagger_auto_schema(
 	operation_description='Edit account.',
-	method='put',
+	method='post',
 	request_body=openapi.Schema(
     	type=openapi.TYPE_OBJECT,
     	properties={
@@ -329,12 +329,7 @@ def patient_edit(request):
             validate_email(email)
         except:
             raise ValueError('email_format')
-        else:
-            try:
-                id_cnt = PLogin.objects.get(email=email)
-                raise ValueError('email_exist')
-            except PLogin.DoesNotExist:
-                pass
+
         if password2 != password1:
             raise ValueError('password_not_same')
 

@@ -227,7 +227,7 @@ def physician_login(request):
 
 @swagger_auto_schema(
 	operation_description='Edit account. Select one mode (email, password, alert)',
-	method='put',
+	method='post',
 	request_body=openapi.Schema(
     	type=openapi.TYPE_OBJECT,
     	properties={
@@ -269,12 +269,7 @@ def physician_edit(request):
                 validate_email(email)
             except:
                 raise ValueError('email_format')
-            else:
-                try:
-                    id_cnt = DLogin.objects.get(email=email)
-                    raise ValueError('email_exist')
-                except DLogin.DoesNotExist:
-                    pass
+
             d_login.email = email
         elif mode == 'password':
             password = request.data['password']
