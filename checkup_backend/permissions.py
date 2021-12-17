@@ -25,7 +25,7 @@ class PatientAuthenticated(permissions.BasePermission):
 
 class PatientResetAuthenticated(permissions.BasePermission):
     def has_permission(self, request, view):
-        token = request.META.get('HTTP_TOKEN')
+        token = request.META.get('HTTP_RESET_TOKEN')
         if token is None:
             return False
         else:
@@ -43,7 +43,7 @@ class PatientResetAuthenticated(permissions.BasePermission):
 
 class PhysicianAuthenticated(permissions.BasePermission):
     def has_permission(self, request, view):
-        token = request.META.get('HTTP_TOKEN')
+        token = request.META.get('HTTP_RESET_TOKEN')
         if token is None:
             return False
         else:

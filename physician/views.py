@@ -409,7 +409,7 @@ def physician_password_code(request):
                 raise ValueError('time_expire')
             password.delete()
             token = make_token(d_id, auth='physician_reset')
-            return Response({"registrable": True, "token": token}, status=HTTP_200_OK)
+            return Response({"registrable": True, "reset_token": token}, status=HTTP_200_OK)
 
         except PPass.DoesNotExist:
             raise ValueError('code_nonexistent')
