@@ -253,7 +253,7 @@ def physician_login(request):
         error_collection.RAISE_400_WRONG_MODE.as_md(),
 	},
 )
-@api_view(['PUT'])
+@api_view(['POST'])
 @permission_classes((PhysicianAuthenticated,))
 def physician_edit(request):
     d_id = get_id(request)

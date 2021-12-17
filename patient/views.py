@@ -313,7 +313,7 @@ def token_refresh(request):
         error_collection.RAISE_400_PASSWORD_NOT_SAME.as_md(),
 	},
 )
-@api_view(['PUT'])
+@api_view(['POST'])
 @permission_classes((PatientAuthenticated,))
 def patient_edit(request):
     email = request.data['email']
