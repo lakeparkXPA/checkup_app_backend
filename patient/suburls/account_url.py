@@ -8,9 +8,11 @@ urlpatterns = [
     path('check', patient_email_check, name='patient_email_check'),
     path('edit', patient_edit, name='patient_edit'),
     path('remove', patient_remove, name='patient_remove'),
+
     path('forgot', patient_password_forgot, name='patient_password_forgot'),
     path('code', patient_password_code, name='patient_password_code'),
     path('reset', patient_password_reset, name='patient_password_reset'),
+
     path('locale', locale_set, name='locale_set'),
 
     path('refresh', token_refresh, name='token_refresh'),

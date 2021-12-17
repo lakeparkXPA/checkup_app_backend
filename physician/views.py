@@ -530,6 +530,7 @@ def token_refresh(request):
 		HTTP_201_CREATED: 'Success',
 		HTTP_400_BAD_REQUEST:
             error_collection.RAISE_400_WRONG_CODE.as_md() +
+            error_collection.RAISE_400_CODE_EXPIRE.as_md() +
             error_collection.RAISE_400_RELATION_EXISTS.as_md(),
 	},
 )
@@ -545,7 +546,8 @@ def add_patient(request):
             raise ValueError('wrong_code')
 
 
-        dp_relation = DPRelation.objects.filter(p=p_id, d=d_id)
+
+
         try:
             p_obj = PLogin.objects.get(p_id=p_id)
             p_push = p_obj.push_token
@@ -553,6 +555,10 @@ def add_patient(request):
         except:
             raise ValueError('wrong_code')
 
+        if p_obj.code_time < datetime.datetime.now(datetime.timezone.utc):
+            raise ValueError('code_expire')
+
+        dp_relation = DPRelation.objects.filter(p=p_id, d=d_id)
         if dp_relation:
             dp_relation = DPRelation.objects.get(p=p_id, d=d_id)
             if dp_relation.discharged == 1:
@@ -989,6 +995,38 @@ def physician_discharge(request):
     d_update.save()
 
     dp_relation.save()
+
+    p_obj = PLogin.objects.get(p_id=p_id)
+    p_push = p_obj.push_token
+    p_locale = p_obj.locale
+    if p_push:
+        if p_locale == 'kr':
+            title = "퇴원처리 되었습니다."
+            body = "의료진이 퇴원처리를 했습니다."
+        elif p_locale == 'ja':
+            title = "記録を作成してください"
+            body = "医療陣があなたの新しい記録を要請しました。チェックアップ記録を進めてください！"
+        elif p_locale == 'id':
+            title = 'Tuliskan gejalan anda'
+            body = 'Tenaga medis meminta gejala anda untuk dituliskan. Tuliskan riwayat anda di CheckUp!'
+        else:
+            title = "A new request"
+            body = "The medical team is wondering about your status. Please check your status with a new check-up!"
+
+        url = 'https://fcm.googleapis.com/fcm/send'
+
+        headers = {
+            'Authorization': 'key=' + FIREBASE_KEY,
+            'Content-Type': 'application/json; UTF-8',
+        }
+        contents = {
+            'registration_ids': [p_push],
+            'notification': {
+                'title': title,
+                'body': body
+            }
+        }
+        requests.post(url, data=json.dumps(contents), headers=headers)
 
     return Response(status=HTTP_200_OK)
 

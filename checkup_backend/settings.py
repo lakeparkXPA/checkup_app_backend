@@ -74,7 +74,11 @@ CORS_ALLOW_HEADERS = [
     'status',
     'access-control-allow-methods',
     'access-control-allow-origin ',
-    'token'
+    'token',
+    'x-push-token',
+    'x-locale',
+    'x-device-id',
+
 ]
 # CORS_EXPOSE_HEADERS = [
 #

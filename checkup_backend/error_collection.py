@@ -60,6 +60,11 @@ RAISE_400_WRONG_CODE = ErrorCollection(
     status=status.HTTP_400_BAD_REQUEST,
     message='코드가 틀렸습니다.'
 )
+RAISE_400_CODE_EXPIRE = ErrorCollection(
+    code='code_expire',
+    status=status.HTTP_400_BAD_REQUEST,
+    message='코드가 만료되었습니다.'
+)
 RAISE_400_TIME_EXPIRE = ErrorCollection(
     code='time_expire',
     status=status.HTTP_400_BAD_REQUEST,

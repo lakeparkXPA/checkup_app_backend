@@ -27,6 +27,7 @@ class PLogin(models.Model):
     push_token = models.CharField(max_length=255, blank=True, null=True)
     refresh_token = models.CharField(max_length=255,blank=True, null=True)
     locale = models.CharField(max_length=3, blank=True, null=True)
+    code_time = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         managed = False

@@ -340,12 +340,12 @@ def patient_edit(request):
 
         p_id = get_id(request)
 
-        p_user = PLogin(p_id=p_id)
+        p_user = PLogin.objects.get(p_id=p_id)
         p_user.email = email
         p_user.password = password1
         p_user.save()
 
-        p_detail = PInfo(p=p_user)
+        p_detail = PInfo.objects.get(p=p_user)
         p_detail.name = name
         p_detail.save()
 
@@ -1062,7 +1062,7 @@ def locale_set(request):
 def get_physicians(request):
     p_id = get_id(request)
 
-    phy = DPRelation.objects.select_related('d').filter(p=p_id).order_by('add_time').\
+    phy = DPRelation.objects.select_related('d').filter(p=p_id).exclude(discharged=1).order_by('add_time').\
         values('d_id', 'p_id', 'add_time', 'd__name', 'd__nation', 'd__region', 'd__hospital')
 
     phy_lst = []
@@ -1086,6 +1086,9 @@ def get_physicians(request):
 @permission_classes((PatientAuthenticated,))
 def generate_code(request):
     p_id = get_id(request)
+    p = PLogin.objects.get(p_id=p_id)
+    p.code_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+    p.save()
     return Response({'code': p_id + PATIENT_CODE}, status=HTTP_201_CREATED)
 
 
