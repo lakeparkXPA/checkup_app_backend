@@ -11,7 +11,7 @@ from checkup_backend.settings import DEBUG
 schema_view = get_schema_view(
     openapi.Info(
       title="DOCL Check Up",
-      default_version='v1',
+      default_version='v1.2.0',
       description="DOCL Check up backend API",
       terms_of_service="https://www.google.com/policies/terms/",
       contact=openapi.Contact(email="hjshljy@docl.org"),
