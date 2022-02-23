@@ -62,6 +62,8 @@ class PInfo(models.Model):
     name = models.CharField(max_length=100, blank=True, null=True)
     birth = models.DateField(blank=True, null=True)
     sex = models.IntegerField(blank=True, null=True)
+    country = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False

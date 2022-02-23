@@ -69,6 +69,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'HTTP_X_FORWARDED_FOR',
     'user-id',
     'testserver',
     'status',
@@ -169,6 +170,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
+GEOIP_PATH = os.path.join(BASE_DIR, 'static/geoip/')
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static/')

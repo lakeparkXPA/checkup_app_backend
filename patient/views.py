@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.core.validators import validate_email
+from django.contrib.gis.geoip2 import GeoIP2
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, authentication
@@ -196,6 +197,10 @@ def patient_login(request):
     password = request.data['password']
     login_obj = PLogin.objects.filter(email=email)
 
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', None)
+    g = GeoIP2()
+    g_info = g.city(ip)
+
     try:
         try:
             validate_email(email)
@@ -232,6 +237,10 @@ def patient_login(request):
                     p_user.refresh_token = token['refresh_token'].decode()
                     p_user.save()
 
+                    p_info = PInfo.objects.get(p=p_user.p_id)
+                    p_info.country = g_info['country_name']
+                    p_info.city = g_info['city']
+                    p_info.save()
                     return Response(token, status=HTTP_202_ACCEPTED)
 
             except PLogin.DoesNotExist:
