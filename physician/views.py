@@ -1,6 +1,5 @@
 from django.db.models import Q
 from django.core.validators import validate_email
-from django.contrib.gis.geoip2 import GeoIP2
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
@@ -192,9 +191,6 @@ def physician_login(request):
     password = request.data['password']
     login_obj = DLogin.objects.filter(email=email)
 
-    ip = request.META.get('HTTP_X_FORWARDED_FOR', None)
-    g = GeoIP2()
-    g_info = g.city(ip)
     try:
         try:
             validate_email(email)
@@ -221,8 +217,6 @@ def physician_login(request):
 
                     d_user = DLogin.objects.get(email=email)
                     d_user.refresh_token = token['refresh_token'].decode()
-                    d_user.nation = g_info['country_name']
-                    d_user.region = g_info['city']
                     d_user.save()
                     return Response(token, status=HTTP_200_OK)
 
@@ -555,6 +549,8 @@ def add_patient(request):
             p_push = p_obj.push_token
             p_locale = p_obj.locale
         except:
+            raise ValueError('wrong_code')
+        if not p_obj.code_time:
             raise ValueError('wrong_code')
         time_passed = datetime.datetime.now(datetime.timezone.utc) - p_obj.code_time
         if time_passed > datetime.timedelta(minutes=5):
