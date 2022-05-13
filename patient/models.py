@@ -24,6 +24,7 @@ class PLogin(models.Model):
     email = models.EmailField(db_index=True, unique=True, verbose_name='Email Address')
     password = models.CharField(max_length=100, blank=True, null=True)
     agreed = models.IntegerField(blank=True, null=True)
+    register_date = models.DateTimeField(blank=True, null=True)
     push_token = models.CharField(max_length=255, blank=True, null=True)
     refresh_token = models.CharField(max_length=255,blank=True, null=True)
     locale = models.CharField(max_length=3, blank=True, null=True)

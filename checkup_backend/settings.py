@@ -75,6 +75,7 @@ CORS_ALLOW_HEADERS = [
     'status',
     'access-control-allow-methods',
     'access-control-allow-origin ',
+    'access-control-allow-headers',
     'token',
     'reset-token',
     'x-push-token',
