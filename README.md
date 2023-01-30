@@ -1,2 +1,2 @@
 # Checkup Backend
-Backend for Checkup web application on https://covid.docl.org and https://physician.docl.org .
+Backend for self COVID19 checkup web application on https://covid.docl.org and https://physician.docl.org .
