@@ -17,7 +17,7 @@ schema_view = get_schema_view(
       contact=openapi.Contact(email="hjshljy@docl.org"),
       license=openapi.License(name="BSD License"),
     ),
-    url='https://testapi.docl.org/dev/django',
+    url='http://localhost:8000/',
     public=DEBUG,
     permission_classes=(permissions.AllowAny,),
 )

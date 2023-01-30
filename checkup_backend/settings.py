@@ -32,7 +32,7 @@ FIREBASE_KEY = key['FIREBASE_KEY']
 EMAIL_REFRESH_TOKEN = key['EMAIL_REFRESH_TOKEN']
 CLIENT_ID = key['CLIENT_ID']
 CLIENT_SECRET = key['CLIENT_SECRET']
-DEBUG = key['DEBUG']
+DEBUG = True
 ALLOWED_HOSTS = key['ALLOWED_HOSTS']
 PATIENT_CODE = key['PATIENT_CODE']
 
@@ -130,10 +130,10 @@ DATABASE_PORT = key['DATABASE_PORT']
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': DATABASE_NAME,
-        'USER': DATABASE_USER,
+        'NAME': "checkup_django",
+        'USER': "root",
         'PASSWORD': DATABASE_PASSWORD,
-        'HOST': DATABASE_HOST,
+        'HOST': 'localhost',
         'PORT': DATABASE_PORT,
     },
 }

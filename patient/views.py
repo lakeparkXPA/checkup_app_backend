@@ -76,59 +76,62 @@ def patient_register(request):
     name = request.data['name']
 
 
-    # try:
-    if not email:
-        raise ValueError('email_missing')
     try:
-        validate_email(email)
-    except:
-        raise ValueError('email_format')
-    else:
+        if not email:
+            raise ValueError('email_missing')
         try:
-            id_cnt = PLogin.objects.get(email=email)
-            raise ValueError('email_exist')
-        except PLogin.DoesNotExist:
+            validate_email(email)
+        except:
+            raise ValueError('email_format')
+        else:
+            try:
+                id_cnt = PLogin.objects.get(email=email)
+                raise ValueError('email_exist')
+            except PLogin.DoesNotExist:
+                pass
+        if password2 != password1:
+            raise ValueError('password_not_same')
+
+        p_user = PLogin()
+        p_user.email = email
+        p_user.password = password1
+        p_user.agreed = agreed
+        p_user.register_date = datetime.datetime.utcnow()
+        try:
+            push_token = request.data['push_token']
+            if push_token:
+                p_user.push_token = push_token
+        except:
             pass
-    if password2 != password1:
-        raise ValueError('password_not_same')
 
-    p_user = PLogin()
-    p_user.email = email
-    p_user.password = password1
-    p_user.agreed = agreed
-    p_user.register_date = datetime.datetime.utcnow().date()
-    try:
-        push_token = request.data['push_token']
-        if push_token:
-            p_user.push_token = push_token
-    except:
-        pass
-    p_user.save()
 
-    p_fk = p_user
-    p_detail = PInfo(p=p_user)
-    p_detail.p = p_fk
-    p_detail.name = name
+        p_fk = p_user
+        p_detail = PInfo(p=p_user)
+        p_detail.p = p_fk
+        p_detail.name = name
 
-    login_obj = PLogin.objects.filter(email=email)
-    token = PatientLogin(login_obj, many=True).data[0]
 
-    p_user.refresh_token = token['refresh_token'].decode()
-    p_user.save()
-    try:
-        ip = request.META.get('HTTP_X_FORWARDED_FOR', None)
-        g = GeoIP2()
-        g_info = g.city(ip)
-        p_detail = PInfo.objects.get(p=p_user.p_id)
-        p_detail.country = g_info['country_name']
-        p_detail.city = g_info['city']
-    except:
-        pass
-    p_detail.save()
+        try:
+            ip = request.META.get('HTTP_X_FORWARDED_FOR', None)
+            g = GeoIP2()
+            g_info = g.city(ip)
+            p_detail.country = g_info['country_name']
+            p_detail.city = g_info['city']
+        except:
+            pass
+        p_user.save()
+        p_detail.save()
 
-    return Response(token, status=HTTP_201_CREATED)
-    # except Exception as e:
-    #     return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
+        login_obj = PLogin.objects.filter(email=email)
+        token = PatientLogin(login_obj, many=True).data[0]
+
+        p_user.refresh_token = token['refresh_token'].decode()
+        p_user.save()
+
+        return Response(token, status=HTTP_201_CREATED)
+    except Exception as e:
+        print(e)
+        return Response({"code": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
